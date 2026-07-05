@@ -5,12 +5,14 @@ static const unsigned long SCAN_INTERVAL = 30000;
 
 void WifiManager::begin()
 {
+    WiFi.mode(WIFI_STA);
+
     connected = false;
     connecting = false;
     connectStartTime = 0;
     lastRetryTime = 0;
 
-    cachedNetworks = "EMPTY";
+    cachedNetworks = "";
     lastScanTime = 0;
     connectStatus = "";
     statusChanged = false;
@@ -109,6 +111,17 @@ void WifiManager::update()
     }
 }
 
+static String rssiToLabel(int rssi)
+{
+    if (rssi >= -30) return "非常强";
+    if (rssi >= -40) return "很强";
+    if (rssi >= -50) return "很好";
+    if (rssi >= -60) return "良好";
+    if (rssi >= -70) return "一般";
+    if (rssi >= -80) return "比较差";
+    return "很差";
+}
+
 void WifiManager::doScan()
 {
     lastScanTime = millis();
@@ -146,25 +159,11 @@ void WifiManager::doScan()
 
         int idx = indices[i];
 
-        cachedNetworks += "SCAN|";
         cachedNetworks += String(i);
         cachedNetworks += "|";
         cachedNetworks += WiFi.SSID(idx);
         cachedNetworks += "|";
-        cachedNetworks += String(WiFi.RSSI(idx));
-        cachedNetworks += "|";
-
-        switch (WiFi.encryptionType(idx))
-        {
-            case WIFI_AUTH_OPEN:            cachedNetworks += "OPEN";   break;
-            case WIFI_AUTH_WEP:             cachedNetworks += "WEP";    break;
-            case WIFI_AUTH_WPA_PSK:         cachedNetworks += "WPA";    break;
-            case WIFI_AUTH_WPA2_PSK:        cachedNetworks += "WPA2";   break;
-            case WIFI_AUTH_WPA_WPA2_PSK:    cachedNetworks += "WPA2";   break;
-            case WIFI_AUTH_WPA2_ENTERPRISE: cachedNetworks += "WPA2-E"; break;
-            case WIFI_AUTH_WPA3_PSK:        cachedNetworks += "WPA3";   break;
-            default:                        cachedNetworks += "?";      break;
-        }
+        cachedNetworks += rssiToLabel(WiFi.RSSI(idx));
     }
 
     WiFi.scanDelete();

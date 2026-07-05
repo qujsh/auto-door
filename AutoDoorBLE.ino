@@ -55,15 +55,14 @@ String getSSIDbyIndex(int targetIndex)
                 line = networks.substring(start, end);
             }
 
-            // 格式: SCAN|0|Home|-45|WPA2
-            //        p1  p2 p3
+            // 格式: 0|Redmi_E490|良好
+            //       p1  p2
             int p1 = line.indexOf('|');
             int p2 = line.indexOf('|', p1 + 1);
-            int p3 = line.indexOf('|', p2 + 1);
 
-            if (p1 >= 0 && p2 > p1 && p3 > p2)
+            if (p1 >= 0 && p2 > p1)
             {
-                return line.substring(p2 + 1, p3);
+                return line.substring(p1 + 1, p2);
             }
 
             return "";
@@ -118,11 +117,9 @@ void setup()
     ble.begin(
         BLE_DEVICE_NAME,
         SERVICE_UUID,
-        SERVO_CHAR_UUID,
         WIFI_SCAN_CHAR_UUID,
         WIFI_CONFIG_CHAR_UUID,
-        &wifi,
-        &servo
+        &wifi
     );
 
     //=============================
@@ -159,7 +156,7 @@ void setup()
 
         Serial.println("No WiFi. Use nRF Connect to:");
         Serial.println("  Read WiFiScan -> select index");
-        Serial.println("  Write WiFiConfig -> CFG|index|password");
+        Serial.println("  Write WiFiConfig -> 0+password");
     }
 
     Serial.println("System Ready");
@@ -174,58 +171,61 @@ void loop()
 
     servo.update();
 
-    switch (sysState)
+    //=============================
+    // BLE 始终运行（配网 / 切换 WiFi）
+    //=============================
+    ble.update();
+
+    int index;
+    String password;
+
+    if (ble.hasWiFiConfig(index, password))
     {
-        //=============================
-        // 配网模式
-        //=============================
-        case CONFIGURING:
+        String ssid = getSSIDbyIndex(index);
+
+        if (ssid.length() > 0)
         {
-            ble.update();
+            Serial.print("Connect via BLE: ");
+            Serial.println(ssid);
 
-            int index;
-            String password;
+            wifi.saveCredentials(ssid.c_str(), password.c_str());
 
-            if (ble.hasWiFiConfig(index, password))
+            if (sysState == CONFIGURING)
             {
-                String ssid = getSSIDbyIndex(index);
-
-                if (ssid.length() > 0)
-                {
-                    Serial.print("Connect via BLE: ");
-                    Serial.println(ssid);
-
-                    wifi.saveCredentials(ssid.c_str(), password.c_str());
-                    wifi.tryConnect(ssid.c_str(), password.c_str());
-                }
-                else
-                {
-                    Serial.println("Invalid WiFi index");
-                }
+                wifi.tryConnect(ssid.c_str(), password.c_str());
             }
-
-            if (wifi.isConnected())
+            else
             {
-                ble.stop();
-
-                sysState = RUNNING;
-
-                Serial.print("Web: http://");
-                Serial.print(wifi.getLocalIP());
-                Serial.print("  or  http://");
-                Serial.print(MDNS_HOSTNAME);
-                Serial.println(".local");
+                Serial.println("WiFi updated, restarting...");
+                delay(500);
+                ESP.restart();
             }
         }
-        break;
-
-        //=============================
-        // 正常运行
-        //=============================
-        case RUNNING:
+        else
         {
-            door.update();
+            Serial.println("Invalid WiFi index");
         }
-        break;
+    }
+
+    //=============================
+    // CONFIGURING → RUNNING 过渡
+    //=============================
+    if (sysState == CONFIGURING && wifi.isConnected())
+    {
+        sysState = RUNNING;
+
+        Serial.print("Web: http://");
+        Serial.print(wifi.getLocalIP());
+        Serial.print("  or  http://");
+        Serial.print(MDNS_HOSTNAME);
+        Serial.println(".local");
+    }
+
+    //=============================
+    // 日常运行
+    //=============================
+    if (sysState == RUNNING)
+    {
+        door.update();
     }
 }

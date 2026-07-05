@@ -3,7 +3,6 @@
 
 #include <Arduino.h>
 #include <NimBLEDevice.h>
-#include "ServoControl.h"
 #include "WifiManager.h"
 
 class BleManager : public NimBLEServerCallbacks,
@@ -15,19 +14,15 @@ public:
 
     void begin(const char *deviceName,
                const char *serviceUUID,
-               const char *servoUUID,
                const char *wifiScanUUID,
                const char *wifiConfigUUID,
-               WifiManager *wifiMgr,
-               ServoControl *servoCtrl);
+               WifiManager *wifiMgr);
 
     void update();
 
     bool isConnected() const;
 
     bool isBleMode() const;
-
-    bool hasNewCommand(int &angle);
 
     void stop();
 
@@ -54,18 +49,13 @@ private:
 
     NimBLEServer *server;
     NimBLEService *service;
-    NimBLECharacteristic *servoChar;
     NimBLECharacteristic *wifiScanChar;
     NimBLECharacteristic *wifiConfigChar;
 
     WifiManager *wifi;
-    ServoControl *servo;
 
     volatile bool connected;
     volatile bool bleMode;
-
-    volatile bool newCommand;
-    volatile int targetAngle;
 
     int configIndex;
     String configPassword;

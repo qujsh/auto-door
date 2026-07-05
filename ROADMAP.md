@@ -1,8 +1,8 @@
 # AutoDoor 后续拓展路线图
 
-> 当前版本：V3.1 — BLE 配网专用（配网后关闭），DoorController 移除 BLE 耦合，WebServer 一次性创建
->
-> 已完成：超声波三状态机、Web 控制面板 + REST API、BLE 3-Characteristic 配网协议、WifiManager 纯 STA + 30s 扫描缓存 + mDNS、DoorController 只依赖 Ultrasonic + ServoControl
+> 当前版本：V3 — BLE 配网专用（WiFiScan + WiFiConfig 2-Characteristic）
+
+> 已完成：V1 超声波三状态机 + BLE 舵机遥控 | V2 Web 控制面板 + REST API | V3 BLE 配网架构 + WifiManager STA 扫描缓存 + mDNS + DoorController 解耦 BLE
 
 ---
 
@@ -12,8 +12,8 @@
 |------|------|
 | V1 | 超声波三状态机 + BLE 舵机遥控 |
 | V2 | Web 控制面板 + AsyncWebServer + REST API |
-| V2.5 | BLE 多 Characteristic 配网架构（WiFiScan / WiFiConfig / Servo）|
-| V3 | WifiManager 纯 STA + 30s 自动扫描缓存 + 状态通知 + mDNS |
+| V2.5 | BLE 多 Characteristic 配网架构（WiFiScan / WiFiConfig）|
+| V3 | WifiManager 纯 STA + 30s 自动扫描缓存（中文信号标签） + 状态通知 + mDNS + DoorController BLE 解耦 |
 
 ---
 
