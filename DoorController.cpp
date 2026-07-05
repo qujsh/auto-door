@@ -3,12 +3,10 @@
 DoorController::DoorController()
     : ultrasonic(nullptr),
       servo(nullptr),
-      ble(nullptr),
       state(DoorState::CLOSED),
       baseline(0),
       lastSeenTime(0),
       closeStartTime(0),
-      previousBleMode(false),
       manualMode(false),
       detecting(false),
       detectStartTime(0),
@@ -21,21 +19,18 @@ DoorController::DoorController()
 }
 
 void DoorController::begin(Ultrasonic *ultra,
-                           ServoControl *servoCtrl,
-                           BleManager *bleMgr)
+                           ServoControl *servoCtrl)
 {
     ultrasonic = ultra;
     servo = servoCtrl;
-    ble = bleMgr;
 
     baseline = ultrasonic->getBaseline();
 
     state = DoorState::CLOSED;
 
-    lastSeenTime = millis();
+    lastSeenTime = 0;
     closeStartTime = 0;
 
-    previousBleMode = false;
     manualMode = false;
     detecting = false;
     detectStartTime = 0;
@@ -50,52 +45,7 @@ void DoorController::update()
         return;
     }
 
-    unsigned long now = millis();
-
-    bool isBle = ble->isBleMode();
-
-    //=============================
-    // BLE → AUTO 切换：强制关门并重置状态
-    //=============================
-    if (previousBleMode && !isBle)
-    {
-        state = DoorState::CLOSED;
-        servo->setTargetAngle(SERVO_CLOSE_ANGLE);
-        lastSeenTime = now;
-        closeStartTime = 0;
-        detecting = false;
-
-        Serial.println("BLE Disconnected -> AUTO mode, door closed");
-    }
-
-    previousBleMode = isBle;
-
-    //=============================
-    // BLE 模式：直接接管舵机
-    //=============================
-    if (isBle)
-    {
-        updateBleMode();
-        return;
-    }
-
-    //=============================
-    // 自动模式
-    //=============================
-    updateAutoMode(now);
-}
-
-//=====================================================
-// BLE模式：手机直接控制舵机
-//=====================================================
-void DoorController::updateBleMode()
-{
-    int angle;
-
-    if (ble->hasNewCommand(angle))
-    {
-        servo->setTargetAngle(angle);
-    }
+    updateAutoMode(millis());
 }
 
 //=====================================================

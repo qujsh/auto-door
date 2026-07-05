@@ -24,11 +24,7 @@ private:
 
     void setupRoutes();
 
-    // 通用
     void handleRoot(AsyncWebServerRequest *request);
-
-    // 控制面板路由（STA 模式）
-    void setupControlRoutes();
     void handleStatus(AsyncWebServerRequest *request);
     void handleServo(AsyncWebServerRequest *request);
     void handleMode(AsyncWebServerRequest *request,
@@ -38,18 +34,7 @@ private:
                     size_t total);
     void handleCalibrate(AsyncWebServerRequest *request);
 
-    // 配网路由（AP 模式）
-    void setupAPRoutes();
-    void handleWiFiScan(AsyncWebServerRequest *request);
-    void handleWiFiSave(AsyncWebServerRequest *request,
-                        uint8_t *data,
-                        size_t len,
-                        size_t index,
-                        size_t total);
-
-    // JSON 构建
     String buildStatusJson();
-
     const char *doorStateToString(DoorState s);
 };
 

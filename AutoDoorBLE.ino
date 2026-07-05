@@ -9,6 +9,15 @@
 #include "WebServerManager.h"
 
 //=====================================================
+// 系统状态
+//=====================================================
+enum SystemState
+{
+    CONFIGURING,
+    RUNNING
+};
+
+//=====================================================
 // 全局对象
 //=====================================================
 ServoControl servo;
@@ -17,6 +26,56 @@ BleManager ble;
 DoorController door;
 WifiManager wifi;
 WebServerManager web;
+
+SystemState sysState = CONFIGURING;
+
+//=====================================================
+// 根据索引从缓存列表中解析 SSID
+//=====================================================
+String getSSIDbyIndex(int targetIndex)
+{
+    String networks = wifi.getCachedNetworks();
+
+    int start = 0;
+
+    for (int i = 0; i <= targetIndex; i++)
+    {
+        int end = networks.indexOf('\n', start);
+
+        if (i == targetIndex)
+        {
+            String line;
+
+            if (end < 0)
+            {
+                line = networks.substring(start);
+            }
+            else
+            {
+                line = networks.substring(start, end);
+            }
+
+            // 格式: SCAN|0|Home|-45|WPA2
+            //        p1  p2 p3
+            int p1 = line.indexOf('|');
+            int p2 = line.indexOf('|', p1 + 1);
+            int p3 = line.indexOf('|', p2 + 1);
+
+            if (p1 >= 0 && p2 > p1 && p3 > p2)
+            {
+                return line.substring(p2 + 1, p3);
+            }
+
+            return "";
+        }
+
+        if (end < 0) break;
+
+        start = end + 1;
+    }
+
+    return "";
+}
 
 //=====================================================
 // 初始化
@@ -54,12 +113,16 @@ void setup()
     ultrasonic.calibrate();
 
     //=============================
-    // BLE（保留，向后兼容）
+    // BLE
     //=============================
     ble.begin(
         BLE_DEVICE_NAME,
         SERVICE_UUID,
-        CHARACTERISTIC_UUID
+        SERVO_CHAR_UUID,
+        WIFI_SCAN_CHAR_UUID,
+        WIFI_CONFIG_CHAR_UUID,
+        &wifi,
+        &servo
     );
 
     //=============================
@@ -67,22 +130,23 @@ void setup()
     //=============================
     door.begin(
         &ultrasonic,
-        &servo,
-        &ble
+        &servo
     );
 
     //=============================
-    // WiFi（自动：NVS凭证 → STA / AP）
+    // WiFi：读 NVS 尝试连接
     //=============================
     wifi.begin();
 
     //=============================
-    // Web Server
+    // Web Server（始终创建一次）
     //=============================
     web.begin(&door, &servo, &wifi);
 
     if (wifi.isConnected())
     {
+        sysState = RUNNING;
+
         Serial.print("Web: http://");
         Serial.print(wifi.getLocalIP());
         Serial.print("  or  http://");
@@ -91,10 +155,11 @@ void setup()
     }
     else
     {
-        Serial.print("AP Mode, connect to: ");
-        Serial.println(AP_SSID);
-        Serial.print("Then open: http://");
-        Serial.println(wifi.getLocalIP());
+        sysState = CONFIGURING;
+
+        Serial.println("No WiFi. Use nRF Connect to:");
+        Serial.println("  Read WiFiScan -> select index");
+        Serial.println("  Write WiFiConfig -> CFG|index|password");
     }
 
     Serial.println("System Ready");
@@ -107,9 +172,60 @@ void loop()
 {
     wifi.update();
 
-    ble.update();
-
     servo.update();
 
-    door.update();
+    switch (sysState)
+    {
+        //=============================
+        // 配网模式
+        //=============================
+        case CONFIGURING:
+        {
+            ble.update();
+
+            int index;
+            String password;
+
+            if (ble.hasWiFiConfig(index, password))
+            {
+                String ssid = getSSIDbyIndex(index);
+
+                if (ssid.length() > 0)
+                {
+                    Serial.print("Connect via BLE: ");
+                    Serial.println(ssid);
+
+                    wifi.saveCredentials(ssid.c_str(), password.c_str());
+                    wifi.tryConnect(ssid.c_str(), password.c_str());
+                }
+                else
+                {
+                    Serial.println("Invalid WiFi index");
+                }
+            }
+
+            if (wifi.isConnected())
+            {
+                ble.stop();
+
+                sysState = RUNNING;
+
+                Serial.print("Web: http://");
+                Serial.print(wifi.getLocalIP());
+                Serial.print("  or  http://");
+                Serial.print(MDNS_HOSTNAME);
+                Serial.println(".local");
+            }
+        }
+        break;
+
+        //=============================
+        // 正常运行
+        //=============================
+        case RUNNING:
+        {
+            door.update();
+        }
+        break;
+    }
 }

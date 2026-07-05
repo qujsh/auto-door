@@ -40,10 +40,13 @@ constexpr unsigned long DETECT_DEBOUNCE  = 200;
 //=====================================================
 // BLE
 //=====================================================
-#define BLE_DEVICE_NAME       "MyESP32Mini"
+#define BLE_DEVICE_NAME          "MyESP32Mini"
 
-#define SERVICE_UUID          "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
-#define CHARACTERISTIC_UUID   "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+#define SERVICE_UUID             "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+
+#define SERVO_CHAR_UUID          "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+#define WIFI_SCAN_CHAR_UUID      "beb5483e-36e1-4688-b7f5-ea07361b2901"
+#define WIFI_CONFIG_CHAR_UUID    "beb5483e-36e1-4688-b7f5-ea07361b2902"
 
 //=====================================================
 // 门状态
@@ -54,12 +57,6 @@ enum class DoorState
     OPEN,
     WAIT_CLOSE
 };
-
-//=====================================================
-// WiFi Manager
-//=====================================================
-constexpr char AP_SSID[]     = "AutoDoor_Setup";
-constexpr char AP_PASSWORD[] = "";
 
 //=====================================================
 // mDNS

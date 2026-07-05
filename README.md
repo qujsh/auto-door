@@ -1,6 +1,11 @@
-# AutoDoorBLE
+# AutoDoor V3 — 智能自动门控制器
 
-基于 ESP32 的智能自动门系统，支持超声波自动感应和 BLE 手机遥控两种控制方式。
+基于 ESP32 的智能自动门系统。**BLE 负责首次配网**，WiFi 连接后**全部通过 Web 网页控制**。
+
+| 阶段 | 描述 |
+|------|------|
+| **配网** | BLE 3-Characteristic 协议：WiFiScan 查询周围网络、WiFiConfig 选择网络输密码 |
+| **日常** | Web 浏览器 `http://autodoor.local`：超声波自动感应 + 手动控制 + 参数修改 |
 
 ---
 
@@ -12,652 +17,529 @@
 4. [模块职责总览](#4-模块职责总览)
 5. [配置参数详解](#5-配置参数详解)
 6. [业务流程详解](#6-业务流程详解)
-   - [6.1 上电启动流程](#61-上电启动流程)
-   - [6.2 超声波环境标定流程](#62-超声波环境标定流程)
-   - [6.3 主循环调度流程](#63-主循环调度流程)
-   - [6.4 超声波测距与滤波流程](#64-超声波测距与滤波流程)
-   - [6.5 舵机非阻塞运动流程](#65-舵机非阻塞运动流程)
-   - [6.6 AUTO 模式 —— 三状态门控流程](#66-auto-模式--三状态门控流程)
-   - [6.7 BLE 模式 —— 手机遥控流程](#67-ble-模式--手机遥控流程)
-   - [6.8 双模式切换流程](#68-双模式切换流程)
-7. [BLE 控制协议](#7-ble-控制协议)
-8. [串口日志参考](#8-串口日志参考)
-9. [使用步骤](#9-使用步骤)
+   - [6.1 上电启动与系统状态机](#61-上电启动与系统状态机)
+   - [6.2 BLE WiFi 配网流程](#62-ble-wifi-配网流程)
+   - [6.3 WiFi 连接与自动重连](#63-wifi-连接与自动重连)
+   - [6.4 超声波环境标定流程](#64-超声波环境标定流程)
+   - [6.5 主循环调度流程](#65-主循环调度流程)
+   - [6.6 超声波测距与滤波流程](#66-超声波测距与滤波流程)
+   - [6.7 舵机非阻塞运动流程](#67-舵机非阻塞运动流程)
+   - [6.8 AUTO 模式 —— 三状态门控流程](#68-auto-模式--三状态门控流程)
+   - [6.9 BLE 遥控模式](#69-ble-遥控模式)
+   - [6.10 Web 浏览器控制流程](#610-web-浏览器控制流程)
+   - [6.11 MANUAL 网页手动模式](#611-manual-网页手动模式)
+   - [6.12 模式优先级与切换](#612-模式优先级与切换)
+7. [REST API 参考](#7-rest-api-参考)
+8. [BLE 协议参考](#8-ble-协议参考)
+9. [串口日志参考](#9-串口日志参考)
+10. [使用步骤](#10-使用步骤)
 
 ---
 
 ## 1. 系统概述
 
-本项目是一个**智能自动门控制器**，核心功能：
+本项目是一个**智能自动门控制器**，支持两种控制模式（按优先级）：
 
-- **AUTO 模式（默认）**：上电时先用 HC-SR04 超声波传感器测量环境距离作为基线，之后持续监测距离变化。当有人靠近（距离变化 >= 2.5cm），门自动打开；人离开后延时 2 秒自动关闭。
-- **BLE 模式（遥控）**：手机通过蓝牙 BLE 连接 ESP32 后，自动接管控制权，手机可发送任意角度（0°~180°）直接控制舵机。断开 BLE 后自动切回 AUTO 模式。
+| 模式 | 描述 | 触发方式 |
+|------|------|----------|
+| **MANUAL** | 网页手动控制，暂停自动感应 | 浏览器点击 MANUAL 按钮 |
+| **AUTO** | 超声波自动感应，默认模式 | 无人干预 |
 
-硬件组成：ESP32 主控 + HC-SR04 超声波传感器 + 舵机（SG90/MG996R）+ 独立 5V 电源。
+WiFi 首次配网通过 **BLE 多 Characteristic 协议**完成。配网成功后 BLE 关闭，浏览器输入 `http://autodoor.local` 访问控制台。BLE 仅用于配网，不参与日常控制。
+
+系统有两个运行状态：
+
+```
+┌──────────────┐     BLE 配网成功     ┌──────────┐
+│ CONFIGURING  │ ──────────────────▶  │ RUNNING  │
+│ (BLE 广播等配网)│   连接 WiFi        │ (正常运行)│
+└──────────────┘                     └──────────┘
+```
 
 ---
 
 ## 2. 硬件清单与接线
 
-### 元件清单
-
 | 元件 | 数量 | 说明 |
 |------|------|------|
-| ESP32 开发板 | 1 | 主控芯片 |
-| HC-SR04 超声波模块 | 1 | 发射 40kHz 超声波，通过回波时间计算距离 |
-| 舵机 SG90 或 MG996R | 1 | 0~180° 旋转，驱动门体开合 |
-| 5V 独立电源 | 1 | 舵机电流大（堵转可达 2A），不可从 ESP32 3.3V 取电 |
-| 公母杜邦线 | 若干 | 连接各模块 |
+| ESP32 开发板 | 1 | 主控（WiFi + 蓝牙） |
+| HC-SR04 超声波 | 1 | 距离测量 |
+| 舵机 SG90/MG996R | 1 | 驱动门体 |
+| 5V 独立电源 | 1 | 舵机供电 |
 
 ### 接线表
 
-| HC-SR04 | ESP32 | 说明 |
-|---------|-------|------|
-| VCC | 5V | 超声波供电（HC-SR04 需 5V） |
-| GND | GND | 共地 |
-| TRIG | GPIO 2 | 触发引脚，输出 10μs 高电平脉冲 |
-| ECHO | GPIO 1 | 回波引脚，输入高电平持续时间对应距离 |
+| HC-SR04 | ESP32 |
+|---------|-------|
+| VCC | 5V |
+| GND | GND |
+| TRIG | GPIO 2 |
+| ECHO | GPIO 1 |
 
-| 舵机 | 连接 | 说明 |
-|------|------|------|
-| 信号线（橙/黄） | GPIO 5 | PWM 信号线 |
-| VCC（红） | 外部 5V 电源正极 | 独立供电 |
-| GND（棕） | 外部 5V 电源负极 + ESP32 GND | **必须共地**，否则舵机抖动 |
+| 舵机 | 连接 |
+|------|------|
+| 信号线 | GPIO 5 |
+| VCC | 外部 5V |
+| GND | 共地 |
 
 ---
 
 ## 3. 软件依赖
 
-在 Arduino IDE 库管理器中安装：
-
-| 库名 | 用途 |
-|------|------|
-| **NimBLE-Arduino** | 轻量级 BLE 协议栈，提供 BLE Server / Characteristic 功能 |
-| **ESP32Servo** | 基于 ESP32 LEDC 硬件 PWM 的舵机驱动库 |
+| 库 | 安装方式 |
+|----|----------|
+| **ESPAsyncWebServer** | 库管理搜索 `ESP32Async/ESPAsyncWebServer` |
+| **AsyncTCP** | 库管理搜索 `ESP32Async/AsyncTCP` |
+| **NimBLE-Arduino** | 库管理搜索安装 |
+| **ESP32Servo** | 库管理搜索安装 |
+| `WiFi.h` | ESP32 核心自带 |
+| `ESPmDNS.h` | ESP32 核心自带 |
+| `Preferences.h` | ESP32 核心自带 |
 
 ---
 
 ## 4. 模块职责总览
 
-项目共 5 个模块 + 1 个主入口，文件与职责对应如下：
+### 文件清单
 
-| 文件 | 类/作用 | 一句话职责 |
-|------|---------|-----------|
-| `Config.h` | 配置文件（无类） | 集中定义所有可调参数：引脚、角度、时序、UUID 等 |
-| `Ultrasonic.h/.cpp` | `Ultrasonic` 类 | HC-SR04 驱动：原始测距、中值滤波、上电环境标定 |
-| `ServoControl.h/.cpp` | `ServoControl` 类 | 舵机非阻塞渐进驱动：设目标角度 → 每 15ms 走一步 → 到达停止 |
-| `BleManager.h/.cpp` | `BleManager` 类 | BLE 服务端：广播、连接/断开检测、接收手机角度指令 |
-| `DoorController.h/.cpp` | `DoorController` 类 | **核心业务逻辑**：三状态机 + AUTO / BLE 双模式调度 |
-| `AutoDoorBLE.ino` | 无类 | 主入口：`setup()` 初始化各模块 → `loop()` 循环调用 |
+| 文件 | 类 | 职责 |
+|------|-----|------|
+| `Config.h` | — | 所有可调参数：引脚、角度、时序、BLE UUID、WiFi 配置 |
+| `Ultrasonic.h/.cpp` | `Ultrasonic` | HC-SR04 驱动：测距、三点中值滤波、上电标定、滤波器预热 |
+| `ServoControl.h/.cpp` | `ServoControl` | 舵机非阻塞渐进驱动：每 15ms 更新一步，缓开快关 |
+| `BleManager.h/.cpp` | `BleManager` | **BLE 配网服务**：3 Characteristic（WiFiScan / WiFiConfig / Servo） |
+| `DoorController.h/.cpp` | `DoorController` | **核心状态机**：MANUAL/AUTO 双模式调度 + 防抖 + 公开 getter/setter |
+| `WifiManager.h/.cpp` | `WifiManager` | 纯 STA 连接 + 30s 定时 WiFi 扫描缓存 + 连接状态通知 |
+| `WebServerManager.h/.cpp` | `WebServerManager` | AsyncWebServer 路由：控制面板 + REST API + JSON |
+| `WebPage.h` | — | 嵌入式控制面板 HTML/CSS/JS（PROGMEM） |
+| `AutoDoorBLE.ino` | — | 主入口：`setup()` 初始化 + `loop()` CONFIGURING/RUNNING 调度 |
 
 ### 模块依赖关系
 
 ```
-AutoDoorBLE.ino
-    ├── Config.h              (被所有模块包含)
-    ├── ServoControl          (舵机驱动)
-    ├── Ultrasonic            (超声波驱动)
-    ├── BleManager            (BLE 通信)
-    └── DoorController        (核心状态机)
-            ├── 引用 Ultrasonic（读距离 + 读基线）
-            ├── 引用 ServoControl（设目标角度）
-            └── 引用 BleManager（判断 BLE 模式 + 读指令）
+                         AutoDoorBLE.ino
+                              │
+          ┌───────────────────┼───────────────────────┐
+          │                   │                       │
+    WifiManager         WebServerManager         DoorController
+    [STA/扫描/mDNS]     [路由/JSON/HTML]         [AUTO/MANUAL]
+          │                   │                 ┌───────┤
+          │                   │                 │       │
+          └──────┬────────────┘           Ultrasonic ServoControl
+                 │                         [测距]    [舵机]
+           BleManager                                  ↑
+    [WiFiScan/WiFiConfig/Servo] ←─────────────────────┘
+                                仅配网阶段读角度/通知
 ```
+
+**BleManager 持有 WifiManager + ServoControl 指针**：读扫描缓存、推送 WiFi 状态、Servo Read 返回实时角度。配网成功后 BLE 关闭，日常运行不参与控制。
 
 ---
 
 ## 5. 配置参数详解
 
-所有参数集中在 `Config.h` 中定义，修改后重新烧录即可。以下逐项说明每个参数的含义和影响：
+### 5.1 引脚
 
-### 5.1 引脚配置
-
-| 参数 | 值 | 含义 |
+| 参数 | 值 | 说明 |
 |------|-----|------|
-| `TRIG_PIN` | 2 | HC-SR04 的 TRIG 脚接 ESP32 GPIO2 |
-| `ECHO_PIN` | 1 | HC-SR04 的 ECHO 脚接 ESP32 GPIO1 |
-| `SERVO_PIN` | 5 | 舵机信号线接 ESP32 GPIO5 |
+| `TRIG_PIN` | 2 | 超声波 TRIG |
+| `ECHO_PIN` | 1 | 超声波 ECHO |
+| `SERVO_PIN` | 5 | 舵机信号线 |
 
-### 5.2 舵机角度
+### 5.2 舵机
 
-| 参数 | 值 | 含义 |
+| 参数 | 值 | 说明 |
 |------|-----|------|
-| `SERVO_OPEN_ANGLE` | 90° | 开门时舵机转到的角度目标值 |
-| `SERVO_CLOSE_ANGLE` | 0° | 关门时舵机转到的角度目标值（起始位置） |
+| `SERVO_OPEN_ANGLE` | 90° | 开门角度 |
+| `SERVO_CLOSE_ANGLE` | 0° | 关门角度 |
+| `SERVO_UPDATE_INTERVAL` | 15ms | 每步间隔 |
+| `SERVO_OPEN_STEP` | 30° | 开门步长（快：0→90° 约 45ms） |
+| `SERVO_CLOSE_STEP` | 10° | 关门步长（慢：90→0° 约 135ms） |
 
-> **注意**：这两个角度取决于你的机械安装方向。如果开门方向反了，交换两个值即可。
+### 5.3 超声波
 
-### 5.3 舵机运动参数（缓开快关）
-
-| 参数 | 值 | 含义 |
+| 参数 | 值 | 说明 |
 |------|-----|------|
-| `SERVO_UPDATE_INTERVAL` | 15ms | 舵机每 15 毫秒更新一步 |
-| `SERVO_OPEN_STEP` | 30° | 开门时每一步移动 30°——大步快开 |
-| `SERVO_CLOSE_STEP` | 10° | 关门时每一步移动 10°——小步慢关 |
+| `DISTANCE_CHANGE_THRESHOLD` | 2.5cm | 检测阈值 |
+| `MAX_VALID_DISTANCE` | 80cm | 最大有效距离 |
 
-> **为什么快开慢关**：人来了要快速开门减少等待，人走了慢慢关门避免夹到人。
->
-> **耗时估算**：从 0°→90° 开门 ≈ (90/30) × 15ms ≈ **45ms**；关门 ≈ (90/10) × 15ms ≈ **135ms**。
+### 5.4 自动门时序
 
-### 5.4 超声波检测参数
-
-| 参数 | 值 | 含义 |
+| 参数 | 值 | 说明 |
 |------|-----|------|
-| `DISTANCE_CHANGE_THRESHOLD` | 2.5cm | 距离变化阈值：当前距离与基线之差 >= 此值，判定"有人靠近" |
-| `MAX_VALID_DISTANCE` | 80.0cm | 最大有效测距：超过此距离的读数丢弃（视为无效/噪声） |
+| `PRESENCE_TIMEOUT` | 1500ms | 驻留超时 |
+| `CLOSE_DELAY` | 2000ms | 关门延时 |
+| `DETECT_DEBOUNCE` | 200ms | 检测防抖 |
 
-> **阈值调优**：
-> - 太敏感（< 1cm）：环境小幅波动也会触发误开门
-> - 太迟钝（> 10cm）：人很近了才开门
-> - 建议 2~5cm 之间根据实际安装环境调整
+### 5.5 BLE UUID
 
-### 5.5 自动门时序参数（三状态机核心）
+| 常量 | UUID | 属性 | 说明 |
+|------|------|------|------|
+| `SERVICE_UUID` | `4fafc201-...-c331914b` | — | 服务 |
+| `SERVO_CHAR_UUID` | `...-b26a8` | R/W/N | 舵机角度 |
+| `WIFI_SCAN_CHAR_UUID` | `...-b2901` | Read | WiFi 扫描结果 |
+| `WIFI_CONFIG_CHAR_UUID` | `...-b2902` | W/N | 配网指令 & 状态通知 |
 
-| 参数 | 默认值 | 含义 |
-|------|--------|------|
-| `PRESENCE_TIMEOUT` | 1500ms | 人员驻留超时：距离上次检测到人后，仍认为"人在"的最大时长 |
-| `CLOSE_DELAY` | 2000ms | 关门延时：人员离开后，等 2 秒再执行关门动作 |
-| `DETECT_DEBOUNCE` | 200ms | 检测防抖：预留参数，当前版本未使用 |
+### 5.6 Web
 
-> **PRESENCE_TIMEOUT 的作用**：超声波单次测距可能因环境反射偶尔丢失一帧检测，如果"一帧没检测到就立刻关门"会导致频繁开闭。1.5 秒的驻留超时允许传感器短暂丢失信号时不立即触发关门。
->
-> **CLOSE_DELAY 的作用**：确认人已离开后，再等 2 秒才关门。这 2 秒内如果人又回来了，会取消关门继续保持在 OPEN 状态。
-
-### 5.6 BLE 参数
-
-| 参数 | 值 | 含义 |
+| 参数 | 值 | 说明 |
 |------|-----|------|
-| `BLE_DEVICE_NAME` | `"MyESP32Mini"` | 手机上搜索时看到的蓝牙设备名 |
-| `SERVICE_UUID` | `4fafc201-...` | BLE 服务 UUID（可自定义，保持与 APP 一致即可） |
-| `CHARACTERISTIC_UUID` | `beb5483e-...` | BLE 特征 UUID（可自定义） |
+| `MDNS_HOSTNAME` | `autodoor` | mDNS 域名 `.local` |
+| `WEB_PORT` | 80 | HTTP 端口 |
 
-### 5.7 枚举类型
+### 5.7 调试
 
-```cpp
-enum class ControlMode { AUTO, BLE };
-// AUTO = 超声波自动感应模式
-// BLE  = 手机蓝牙遥控模式
-
-enum class DoorState { CLOSED, OPEN, WAIT_CLOSE };
-// CLOSED     = 门已关闭，等待有人靠近
-// OPEN       = 门已打开，人在门口
-// WAIT_CLOSE = 人已离开，正在倒计时关门（2秒钟）
-```
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `DEBUG_DISTANCE` | `true` | 串口输出距离调试 |
+| `DEBUG_PRINT_INTERVAL` | 300ms | 打印间隔 |
 
 ---
 
 ## 6. 业务流程详解
 
-### 6.1 上电启动流程
+### 6.1 上电启动与系统状态机
 
 ```
-ESP32 上电 / 复位
+ESP32 上电
     │
-    ├─ 1. Serial.begin(115200)
-    │     开启串口通信，波特率 115200
-    │     输出： "================================="
-    │            "AutoDoorBLE Starting..."
-    │            "================================="
+    ├─ Serial 115200 → "AutoDoorBLE Starting..."
+    ├─ Servo 归位 0°
+    ├─ Ultrasonic 标定（10 样本 → 基线）
+    ├─ BLE 广播开始（3 Characteristic Service）
+    ├─ DoorController 初始化（state=CLOSED, manualMode=false）
+    ├─ WifiManager::begin()
+    │    ├─ 读 NVS → 有凭证 → tryConnect()
+    │    │   成功 → sysState=RUNNING → Web Server → mDNS
+    │    └─ 无凭证 → 等待 BLE 配网
     │
-    ├─ 2. servo.begin(...)
-    │     ① 将舵机信号线绑定到 SERVO_PIN (GPIO5)
-    │     ② 记录每步更新间隔 = 15ms
-    │     ③ 记录开门步长 30°/步、关门步长 10°/步
-    │     ④ 舵机立即写入 SERVO_CLOSE_ANGLE (0°)，门归位关闭
-    │     ⑤ 当前角度 = 目标角度 = 0°，舵机处于静止状态
-    │
-    ├─ 3. ultrasonic.begin(...) + ultrasonic.calibrate()
-    │     ① 设置 TRIG 为输出，ECHO 为输入，TRIG 拉低
-    │     ② 进入标定程序（详见 6.2 节）
-    │     输出： "Baseline = xxx.xx"  （xxx 为标定后的环境基线距离）
-    │
-    ├─ 4. ble.begin(...)
-    │     ① 初始化 NimBLE 协议栈，设备名 = "MyESP32Mini"
-    │     ② 设置发射功率为最高档 P9
-    │     ③ 创建 BLE Server
-    │     ④ 创建 Service（UUID 自定义）
-    │     ⑤ 创建 Characteristic（UUID 自定义），属性 = READ | WRITE | NOTIFY
-    │     ⑥ Characteristic 初始值设为 "Hello"
-    │     ⑦ 启动 Service
-    │     ⑧ 配置广播数据：包含 Service UUID + 设备名
-    │     ⑨ 开始 BLE 广播
-    │     输出： "BLE Advertising Started"
-    │
-    ├─ 5. door.begin(ultrasonic, servo, ble)
-    │     ① 保存三个模块指针
-    │     ② 从 Ultrasonic 获取标定后的 baseline
-    │     ③ 门状态初始化为 DoorState::CLOSED
-    │     ④ lastSeenTime = 当前时间，closeStartTime = 0
-    │     ⑤ 确保舵机目标角度 = CLOSE_ANGLE（0°）
-    │
-    └─ 6. 输出 "System Ready"，系统进入 loop() 主循环
+    └─ 串口提示当前状态
 ```
 
-### 6.2 超声波环境标定流程
-
-> 标定目的：测量"没有任何人/物体靠近时"的环境距离，作为后续检测的参考基线。
+### 6.2 BLE WiFi 配网流程
 
 ```
-calibrate() 启动
+sysState = CONFIGURING
     │
-    ├─ 预设采集 10 次有效数据
-    ├─ 每次调用 readRaw() 获取原始距离（未滤波）
+    ├─ BLE 广播 MyESP32Mini
     │
-    ├─ 有效性判断：
-    │   ├─ 距离 <= 0       → 丢弃，不计数
-    │   ├─ 距离 > 80cm     → 丢弃，不计数
-    │   └─ 0 < 距离 <= 80  → 有效，存入 values[]
+    ├─ WifiManager 每 30s 自动扫描附近 WiFi → 缓存格式：
+    │     "0|HomeWiFi|-45|WPA2\n1|Office|-60|WPA2"
     │
-    ├─ 每两次采集之间间隔 50ms
-    ├─ 直到 values[] 存满 10 个有效值
+    ├─ 用户 nRF Connect 操作：
+    │   ① Read WiFiScan Characteristic → 看到 WiFi 列表
+    │   ② Write WiFiConfig Characteristic → "CFG|0|password123"
     │
-    ├─ 数据处理：
-    │   ├─ 遍历 10 个值，记录最小值 minValue
-    │   ├─ 遍历 10 个值，记录最大值 maxValue
-    │   ├─ 求总和 sum
-    │   └─ baseline = (sum - minValue - maxValue) / 8
-    │        ↑ 去掉一个最小、一个最大，剩下 8 个取平均
-    │        （消除突发干扰值的影响）
+    ├─ BleManager 收到 Write：
+    │   解析 "CFG|index|password"
+    │   设置 newWiFiConfig=true
     │
-    ├─ 输出：串口打印 "Baseline = xxx.xx"
+    ├─ loop() 中检测到 newWiFiConfig：
+    │   按 index 从 WifiManager 缓存查 SSID
+    │   wifi.saveCredentials(ssid, password)
+    │   wifi.tryConnect(ssid, password)
     │
-    └─ 标定完成，baseline 存入成员变量供后续调用 getBaseline() 获取
+    ├─ WifiManager 连接过程：
+    │   connectStatus → "STATE|CONNECTING"
+    │   BleManager::update() 检测到 statusChanged → wifiConfigChar.notify()
+    │
+    └─ 连接成功：
+        connectStatus → "STATE|CONNECTED|192.168.1.88"
+        BleManager 推送 notify
+        BleManager::stop() 关闭广播
+        Web Server 启动
+        sysState → RUNNING
 ```
 
-> **标定前提假设**：上电时门口无人。如果标定时有人在走动，baseline 会偏小，导致后续检测不灵敏。解决办法：重新上电。
-
-### 6.3 主循环调度流程
+### 6.3 WiFi 连接与自动重连
 
 ```
-loop() 每帧执行（无延迟，CPU 空转，各模块内部自己判断是否需要动作）：
+WifiManager 内部：
 
-    ┌──────────────────────────────────────────┐
-    │  1. ble.update()                         │
-    │     （当前为空函数，预留给未来扩展）        │
-    ├──────────────────────────────────────────┤
-    │  2. servo.update()                       │
-    │     非阻塞舵机驱动（详见 6.5 节）           │
-    │     内部判断：距上次更新是否 >= 15ms？      │
-    │     是 → 走一步                          │
-    │     否 → 立即返回                        │
-    ├──────────────────────────────────────────┤
-    │  3. door.update()                        │
-    │     核心状态机（详见 6.6、6.7 节）          │
-    │     内部判断：                            │
-    │     ├─ BLE 已连接？→ 走 BLE 模式分支      │
-    │     └─ 没有连接  → 走 AUTO 模式分支       │
-    └──────────────────────────────────────────┘
+begin():
+  读 NVS → 有 ssid → WiFi.begin()
+  connecting = true
+  connectStatus = "STATE|CONNECTING"
+  statusChanged = true
+
+update():
+  ├─ 每 30s WiFi.scanNetworks() → 缓存到 cachedNetworks
+  │
+  ├─ 连接中：
+  │   WL_CONNECTED → connected=true, statusChanged=true
+  │   >15s 超时 → connecting=false, "STATE|FAILED|TIMEOUT"
+  │
+  ├─ 已连接断线：
+  │   WL_DISCONNECTED → connected=false, "STATE|DISCONNECTED"
+  │   每 30s WiFi.reconnect()
+  │
+  └─ statusChanged=true 时
+      BleManager::update() 消费标志 → wifiConfigChar.notify()
 ```
 
-> **非阻塞设计**：loop 中没有 `delay()`。所有需要等待的地方都用 `millis()` 时间戳比较实现，确保系统始终能响应 BLE 连接/断开事件。
-
-### 6.4 超声波测距与滤波流程
-
-#### 6.4.1 原始测距（readRaw）
+### 6.4 超声波环境标定流程
 
 ```
-readRaw() 每次调用执行：
-    │
-    ├─ 1. TRIG 脚拉低 2μs（确保起始状态干净）
-    │
-    ├─ 2. TRIG 脚拉高 10μs（发出 40kHz 超声波脉冲）
-    │      HC-SR04 内部自动发送 8 个 40kHz 方波
-    │
-    ├─ 3. TRIG 脚拉低，等待回波
-    │
-    ├─ 4. pulseIn(ECHO_PIN, HIGH, 30000μs)
-    │      测量 ECHO 脚高电平持续时间，超时 = 30000μs
-    │      ├─ 超时返回 0 → 返回 -1（无效）
-    │      └─ 正常返回 duration（微秒）
-    │
-    ├─ 5. 计算距离：
-    │      distance = duration × 0.0343 / 2
-    │      0.0343 cm/μs 是声速 (343m/s)
-    │      除以 2 是因为超声波走了往返（发射→物体→接收）
-    │
-    ├─ 6. 有效性检查：
-    │      ├─ distance <= 0    → 返回 -1
-    │      ├─ distance > 80cm  → 返回 -1（超过有效范围）
-    │      └─ 0 < <= 80       → 返回 distance
-    │
-    └─ 返回结果
+calibrate() 启动:
+    ├─ 采集 10 次有效 readRaw() 数据
+    ├─ 过滤：<=0 丢弃，>80cm 丢弃
+    ├─ 间隔 50ms，打印每步结果
+    ├─ 去 Min/Max，取 8 个平均 → baseline
+    └─ primeFilter(): 3 次有效读数预热中值滤波器
 ```
 
-> **pulseIn 超时 30000μs**：声波飞 30000μs 往返距离 ≈ 514cm，远超 80cm 有效范围。设超时是为了防止 ECHO 脚卡死导致永久阻塞。
-
-#### 6.4.2 中值滤波（readDistance）
+### 6.5 主循环调度流程
 
 ```
-readDistance() 每次调用执行：
+loop():
+    ├─ wifi.update()
+    │   定时扫描 + 连接状态监测 + mDNS
     │
-    ├─ 1. 调用 readRaw() 获取原始距离
-    ├─    若返回 -1（无效），直接返回 -1 给上层
+    ├─ servo.update()
+    │   非阻塞每 15ms 走一步
     │
-    ├─ 2. 维护滑动窗口 history[3]：
-    │      将本次读数写入 history[historyIndex]
-    │      historyIndex++（0→1→2→0 循环）
-    │      存够 3 个后 historyReady = true
-    │
-    ├─ 3. 窗口未满（< 3 次有效读数）：
-    │     直接返回本次原始值（不过滤）
-    │
-    └─ 4. 窗口已满（>=3 次有效读数）：
-           对 history[0], history[1], history[2] 取中值
-           返回中值（过滤掉偶发的高/低跳变）
+    └─ sysState 分支：
+        ├─ CONFIGURING：
+        │   ble.update()  // 推送 WiFi 状态 notify + 等配网数据
+        │   收到 CFG → 查 SSID → 存 NVS → tryConnect
+        │   连接成功 → Web Server → 关 BLE → RUNNING
+        │
+        └─ RUNNING：
+            ble.update()  // 应急遥控
+            door.update() // 状态机
 ```
 
-> **为什么用中值滤波**：超声波偶尔会因反射角度、障碍物材质等产生一两帧突变。中值滤波可剔除这些偶发毛刺，避免门误触发。
-
-### 6.5 舵机非阻塞运动流程
+### 6.6 超声波测距与滤波流程
 
 ```
-servo.update() 每次调用（loop 中每帧都调用）：
-    │
-    ├─ 1. 计算 now = millis()
-    │
-    ├─ 2. 距离上次更新 < 15ms？
-    │     是 → 什么也不做，直接返回
-    │
-    ├─ 3. 距离上次更新 >= 15ms：
-    │     记录 lastUpdateTime = now
-    │
-    ├─ 4. currentAngle == targetAngle？
-    │     是 → 已到达目标，什么也不做，返回
-    │
-    ├─ 5. 角度差 > 0（需要增大角度，即往开门方向转）：
-    │     currentAngle += openStep(30°)
-    │     如果加过头了（超过 targetAngle），钳位到 targetAngle
-    │
-    ├─ 6. 角度差 < 0（需要减小角度，即往关门方向转）：
-    │     currentAngle -= closeStep(10°)
-    │     如果减过头了（低于 targetAngle），钳位到 targetAngle
-    │
-    └─ 7. servo.write(currentAngle)
-           发送 PWM 信号让舵机转到当前角度
+readRaw():
+    发 10μs 脉冲 → pulseIn(30ms 超时) → duration × 0.0343 / 2 = cm
+    有效性：<=0→-1, >80cm→-1, 正常→返回
+
+readDistance():
+    d = readRaw()
+    d<0 → return -1 (不污染滤波窗口)
+    history[3] 环形缓冲 → >=3个 → median3()
 ```
 
-> **关键设计**：舵机模块只认 targetAngle（目标角度）和 currentAngle（当前角度）。外部只需调 `setTargetAngle(角度)`，舵机模块自动渐进运动到目标。不需要外部代码关心运动过程。
-
-#### 设置目标角度的接口
+### 6.7 舵机非阻塞运动流程
 
 ```
-setTargetAngle(int angle) 被外部调用时：
-    │
-    └─ 将 angle 钳位到 [0, 180]，存入 targetAngle
-       当前版本支持 3 处调用：
-       ① door.begin()          → 设为 CLOSE_ANGLE (0°)，初始关门
-       ② door.setDoorOpen()    → 设为 OPEN_ANGLE  (90°)，AUTO 模式开门
-       ③ door.setDoorClose()   → 设为 CLOSE_ANGLE (0°)，AUTO 模式关门
-       ④ door.updateBleMode()  → 设为手机发来的任意角度，BLE 模式
+servo.update():
+    now - lastUpdateTime < 15ms → 跳过
+    currentAngle == targetAngle → 跳过
+    currentAngle < targetAngle → += openStep(30°)
+    currentAngle > targetAngle → -= closeStep(10°)
+    servo.write(currentAngle)
 ```
 
-### 6.6 AUTO 模式 —— 三状态门控流程
-
-> 这是整个项目最核心的业务逻辑。
+### 6.8 AUTO 模式 —— 三状态门控流程
 
 ```
-door.update() → 判断当前没有 BLE 连接 → 调用 updateAutoMode(now)：
-    │
-    ├────────────────────────────────────────────────────────────
-    │ 步骤 A：感知层 —— 读距离、算差值、判有人
-    ├────────────────────────────────────────────────────────────
-    │
-    ├─ A1. d = ultrasonic->readDistance()
-    │      返回中值滤波后的距离（cm）
-    │      若返回 -1（无效），本帧不处理，直接返回
-    │
-    ├─ A2. diff = baseline - d
-    │      │
-    │      │ 含义：baseline（标定时无人距离）比当前距离大多少
-    │      │
-    │      ├─ diff >= 2.5cm → 有物体靠近，感到"有人"
-    │      │   例如 baseline=60cm，当前=50cm → diff=10cm > 2.5 → 有人
-    │      │
-    │      └─ diff < 2.5cm  → 没变化或变化不够大，感到"无人"
-    │          例如 baseline=60cm，当前=58cm → diff=2cm < 2.5 → 无人
-    │
-    ├─ A3. 若 diff >= 2.5cm：
-    │      lastSeenTime = now  （刷新"最后看到人的时间"）
-    │
-    ├─ A4. isPresent = (now - lastSeenTime) < 1500ms
-    │      │
-    │      │ 只要在 1.5 秒内有检测到人，就认为"人还在"
-    │      │ 这允许偶尔一两帧没检测到人时不立即认为"人离开了"
-    │      │
-    │      ├─ true  → 有人
-    │      └─ false → 无人
-    │
-    ├────────────────────────────────────────────────────────────
-    │ 步骤 B：决策层 —— 三状态机
-    ├────────────────────────────────────────────────────────────
-    │
-    │  状态一：CLOSED（门关着，等人来）
-    │  ┌─────────────────────────────────────────────────┐
-    │  │ 条件：isPresent == true（检测到有人靠近）        │
-    │  │ 动作：① setDoorOpen() → targetAngle = 90°      │
-    │  │       ② state 改为 DoorState::OPEN              │
-    │  │ 说明：舵机将在后续 servo.update() 中渐进开门     │
-    │  │       开门是快动作（30°/步，约 45ms 完成）        │
-    │  └─────────────────────────────────────────────────┘
-    │ 
-    │  状态二：OPEN（门开着，人在门口）
-    │  ┌─────────────────────────────────────────────────┐
-    │  │ 条件：isPresent == false（人离开了）             │
-    │  │ 动作：① closeStartTime = now（记录离开时间）     │
-    │  │       ② state 改为 DoorState::WAIT_CLOSE        │
-    │  │ 说明：不立即关门，进入 WAIT_CLOSE 等待 2 秒      │
-    │  │       给「人短暂走开又回来」留余地               │
-    │  └─────────────────────────────────────────────────┘
-    │
-    │  状态三：WAIT_CLOSE（等待关门倒计时）
-    │  ┌─────────────────────────────────────────────────┐
-    │  │ 分支 A — 人回来了：                              │
-    │  │   条件：isPresent == true                        │
-    │  │   动作：state 改回 DoorState::OPEN               │
-    │  │   效果：取消关门倒计时，继续保持在开门状态        │
-    │  │                                                  │
-    │  │ 分支 B — 倒计时到：                              │
-    │  │   条件：(now - closeStartTime) >= 2000ms         │
-    │  │   动作：① setDoorClose() → targetAngle = 0°     │
-    │  │         ② state 改为 DoorState::CLOSED           │
-    │  │   效果：舵机渐进关门，回到初始状态               │
-    │  │         关门是慢动作（10°/步，约 135ms 完成）     │
-    │  └─────────────────────────────────────────────────┘
-    │
-    └─ 每一帧都会从 A1 重新开始：读距离 → 判有人 → 查状态 → 决定是否切换
+updateAutoMode(now):
+    d = ultrasonic->readDistance()
+    d<0 → 本帧跳过
+
+    diff = baseline - d
+    detect = diff >= 2.5cm
+
+    防抖: detect 持续 >=200ms → lastSeenTime=now
+    isPresent = (now - lastSeenTime) < 1500ms
+
+    状态机:
+    ┌─────────────────────────────────────────┐
+    │ CLOSED   isPresent → (开 90°) → OPEN    │
+    │ OPEN     !isPresent → WAIT_CLOSE        │
+    │ WAIT_CLOSE  isPresent → OPEN            │
+    │ WAIT_CLOSE  2s到 → (关 0°) → CLOSED     │
+    └─────────────────────────────────────────┘
 ```
 
-#### 状态转换图
+### 6.9 BLE 遥控模式
 
 ```
-                         有人靠近
-              ┌─────────────────────────┐
-              │                         │
-              ▼                         │
-         ┌────────┐               ┌─────────┐
-         │ CLOSED │               │  OPEN   │
-         │ 门关着  │──────────────▶│ 门开着  │
-         └────────┘  有人靠近     └─────────┘
-              ▲          (diff>=2.5)     │
-              │                         │ 人离开
-              │                         │ (isPresent=false)
-              │                         ▼
-              │                  ┌──────────────┐
-              │                  │ WAIT_CLOSE   │
-              │     2秒倒计时到  │ 等待关门     │
-              └─────────────────│ (倒计时2秒)  │
-                    关门         └──────────────┘
-              (targetAngle=0°)         │
-                                       │ 人又回来了
-                                       │ (isPresent=true)
-                                       │
-                                       ▼
-                                  ┌─────────┐
-                                  │  OPEN   │
-                                  │ (取消关门)│
-                                  └─────────┘
+ble->isBleMode() == true:
+    ble->hasNewCommand(angle)
+      true → servo->setTargetAngle(angle)
+      false → 保持当前角度
+
+    断开连接 → 强制关门 → 切回 AUTO
 ```
 
-#### 典型场景时间线
+### 6.10 Web 浏览器控制流程
 
 ```
-场景：一个人走过门口
-─────────────────────────────────────────────────────────────
-时间 | 状态      | 事件
-─────┼───────────┼────────────────────────────────────────────
-T0   | CLOSED    | 系统待机，超声波每帧读距离
-T1   | CLOSED→OPEN| 人靠近，diff >= 2.5cm 触发：
-     |           |   ① 立即设 targetAngle=90°
-     |           |   ② 舵机以 30°/步 快速开门（约45ms完成）
-     |           |   ③ 状态切为 OPEN
-T2   | OPEN      | 人在门口区域，每帧刷新 lastSeenTime
-T3   | OPEN→WAIT | 人走远，diff < 2.5cm：
-     |           |   ① isPresent 在 1.5s 后变 false
-     |           |   ② 切为 WAIT_CLOSE，记录 closeStartTime=T3
-T3→ | WAIT      | 倒计时中...门仍保持开着
-T3+2s| WAIT→CLOSE | 2秒到：
-     |           |   ① 设 targetAngle=0°
-     |           |   ② 舵机以 10°/步 慢速关门（约135ms完成）
-     |           |   ③ 状态切回 CLOSED
-─────────────────────────────────────────────────────────────
+浏览器 GET / → INDEX_HTML 控制页
 
-场景：人走过去又回头
-─────────────────────────────────────────────────────────────
-T4+0.5s | WAIT   | 倒计时 2 秒内，人突然返回
-        | →OPEN  | isPresent 变 true，状态切回 OPEN，取消关门
-─────────────────────────────────────────────────────────────
+页面 JS 每 500ms:
+    fetch /api/status → JSON → 更新 DOM
+
+用户操作:
+    滑块 / OPEN / CLOSE → GET /api/servo?angle=N
+    AUTO / MANUAL → POST /api/mode
+    CALIBRATE → POST /api/calibrate
 ```
 
-### 6.7 BLE 模式 —— 手机遥控流程
+### 6.11 MANUAL 网页手动模式
 
 ```
-door.update() → 判断 ble->isBleMode() == true → 调用 updateBleMode()：
-    │
-    ├─ 检查 ble->hasNewCommand()
-    │   │
-    │   ├─ false（没新指令）：
-    │   │   什么也不做，返回
-    │   │   舵机保持在最后一次设置的角度
-    │   │
-    │   └─ true（手机刚发了新指令）：
-    │       ① 读取 ble->getTargetAngle() 获取手机发来的角度值
-    │       ② 调用 servo->setTargetAngle(角度)
-    │       ③ servo.update() 会在后续帧中渐进运动到目标角度
-    │
-    └─ 注意：BLE 模式下完全不走 AUTO 模式的三状态机
-             手机说转到哪就转到哪，不会自动感应开门/关门
+door->isManualMode() == true:
+    DoorController::update() → 直接 return
+    超声波三状态机暂停
+    servo.update() 依然运行（Web API 直接设 targetAngle）
 ```
 
-#### 手机指令接收流程（BLE 底层回调，由 NimBLE 框架触发）
+### 6.12 模式优先级与切换
 
 ```
-手机 APP 向 Characteristic 写入数据（如字符串 "90"）
-    │
-    ├─ NimBLE 框架自动触发 BleManager::onWrite() 回调：
-    │
-    ├─ 1. characteristic->getValue() 获取写入的原始字节
-    │      解析为字符串（如 "90"）
-    │
-    ├─ 2. 空值检查：如果为空字符串，直接返回不处理
-    │
-    ├─ 3. 串口打印 "BLE RX: 90"（调试用）
-    │
-    ├─ 4. atoi(字符串) 转为 int
-    │      钳位到 [0, 180] 范围
-    │      存入 targetAngle 成员变量
-    │
-    ├─ 5. newCommand = true
-    │      （DoorController::updateBleMode 会检测到这个标志）
-    │
-    └─ 6. characteristic->setValue(原值) + notify()
-           回显确认已收到指令
-```
+优先级: MANUAL > AUTO
 
-### 6.8 双模式切换流程
-
-```
-系统默认以 AUTO 模式运行
-    │
-    ├─ BLE 有手机连接 ──────────────────────┐
-    │   触发 onConnect() 回调                │
-    │   bleMode = true                       │
-    │   door.update() 中检测到 → 走 BLE 分支  │
-    │   超声波检测被忽略，三状态机停止运行     │
-    │                                        │
-    │   手机手动控制舵机角度                  │
-    │                                        │
-    ├─ BLE 断开连接 ─────────────────────────┤
-    │   触发 onDisconnect() 回调              │
-    │   bleMode = false                      │
-    │   door.update() 中检测到 → 走 AUTO 分支  │
-    │   超声波检测恢复，三状态机重新运行       │
-    │   门保持当前位置不动，直到下次检测到人  │
-    │                                        │
-    │   重新开始 BLE 广播（等待下次连接）      │
-    └────────────────────────────────────────┘
-```
-
-> **切换瞬间门的行为**：
-> - **AUTO → BLE**：门停在当前角度，等待手机发指令。如果 AUTO 模式正在开门/关门过程中，中途停下。
-> - **BLE → AUTO**：门停在当前角度，等待超声波检测到人后再动作。如果 BLE 模式下手机把门开到了奇怪的角度，AUTO 模式不会自动把它关回去——要等到检测到有人靠近才会触发下一次开门→关门流程。
+    ┌─────────┐
+    │  AUTO   │ ← 默认（超声波自动感应）
+    └────┬────┘
+         │
+    ┌────┴────┐
+    ▼         ▼
+  AUTO     MANUAL
+(超声波)   (网页)
 
 ---
 
-## 7. BLE 控制协议
+## 7. REST API 参考
 
-| 项目 | 值 |
+运行在 STA 模式下（`http://autodoor.local` 或 `http://IP`）：
+
+| 方法 | 路径 | 参数 | 响应 |
+|------|------|------|------|
+| `GET` | `/` | — | HTML 控制页 |
+| `GET` | `/api/status` | — | JSON 状态 |
+| `GET` | `/api/servo` | `?angle=90` | `{"ok":true}` |
+| `POST` | `/api/mode` | `{"mode":"manual"}` 或 `{"mode":"auto"}` | `{"ok":true}` |
+| `POST` | `/api/calibrate` | — | `{"ok":true,"baseline":35.2}` |
+
+### /api/status 字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `distance` | float | 当前测距 (cm) |
+| `baseline` | float | 基线距离 (cm) |
+| `diff` | float | baseline - distance |
+| `detect` | bool | 是否检测到靠近 |
+| `present` | bool | 是否在场 |
+| `door` | string | CLOSED / OPEN / WAIT_CLOSE |
+| `servo` | int | 舵机当前角度 |
+| `mode` | string | AUTO / MANUAL |
+| `wifi` | bool | 是否连接 |
+| `ip` | string | IP 地址 |
+| `rssi` | int | 信号强度 (dBm) |
+
+---
+
+## 8. BLE 协议参考
+
+### Service
+
+| 属性 | 值 |
 |------|-----|
+| UUID | `4fafc201-1fb5-459e-8fcc-c5c9c331914b` |
 | 设备名 | `MyESP32Mini` |
-| Service UUID | `4fafc201-1fb5-459e-8fcc-c5c9c331914b` |
-| Characteristic UUID | `beb5483e-36e1-4688-b7f5-ea07361b26a8` |
-| Characteristic 属性 | READ / WRITE / NOTIFY |
-| 初始值 | `"Hello"` |
 
-### 指令格式
+### Characteristic 列表
 
-- **写入**：字符串格式的角度值，例如 `"90"`（开门）、`"0"`（关门）、`"45"`（半开）
-- **范围**：0 ~ 180（超出范围自动钳位）
-- **响应**：写操作后 ESP32 会通过 Notify 回显收到的值
+| 名称 | UUID | 属性 | 方向 | 数据格式 |
+|------|------|------|------|----------|
+| **Servo** | `...b26a8` | Read / Write / Notify | 双向 | 数字 `0` ~ `180` |
+| **WiFiScan** | `...b2901` | Read | ESP32→手机 | `SCAN\|索引\|SSID\|RSSI\|加密方式` 多行 |
+| **WiFiConfig** | `...b2902` | Write / Notify | 双向 | Write: `CFG\|索引\|密码` ，Notify: `STATE\|状态` |
 
-### 推荐测试 APP
+### WiFiScan Read 示例
 
-- **nRF Connect**（Android / iOS）—— 专业 BLE 调试工具
-- **LightBlue**（iOS）—— 简洁易用
-- **Blue for Arduino**（Android）—— 专为 Arduino BLE 设计
+```
+SCAN|0|HomeWiFi|-45|WPA2
+SCAN|1|TP-LINK|-60|WPA2
+SCAN|2|OpenGuest|-72|OPEN
+```
 
----
+无数据时返回 `EMPTY`。
 
-## 8. 串口日志参考
+### WiFiConfig Write 示例
 
-上电后串口监视器（115200 波特率）会依次输出：
+```
+CFG|0|password123
+```
 
-| 日志内容 | 含义 | 对应阶段 |
-|----------|------|----------|
-| `=================================` | 分隔线 | 启动 |
-| `AutoDoorBLE Starting...` | 系统启动 | 启动 |
-| `=================================` | 分隔线 | 启动 |
-| `Baseline = 65.32` | 标定完成，环境基线距离 65.32cm | 标定 |
-| `BLE Advertising Started` | BLE 开始广播 | BLE 初始化 |
-| `System Ready` | 全部初始化完成，进入主循环 | 就绪 |
-| `BLE Connected` | 手机已连接，自动切换为 BLE 模式 | 连接事件 |
-| `BLE RX: 90` | 收到手机指令 90° | BLE 写入 |
-| `BLE Read` | 手机执行了读操作 | BLE 读取 |
-| `BLE Disconnected, reason=xxx` | 手机断开，切回 AUTO 模式 | 断开事件 |
+表示选择索引 0（HomeWiFi），密码 `password123`。
 
----
+### WiFiConfig Notify 状态
 
-## 9. 使用步骤
+```
+STATE|CONNECTING
+STATE|CONNECTED|192.168.1.88
+STATE|FAILED|TIMEOUT
+STATE|DISCONNECTED
+```
 
-1. 按接线表连接硬件，**舵机必须使用独立 5V 供电**
-2. 在 Arduino IDE 中安装 **NimBLE-Arduino** 和 **ESP32Servo** 库
-3. 选择开发板：ESP32 Dev Module
-4. 根据实际门体调整 `Config.h` 中的开/关门角度和时序参数
-5. 烧录程序
-6. 打开串口监视器（**波特率 115200**），观察启动日志
-7. 等待 `System Ready` 输出，系统开始运行
-8. **AUTO 模式测试**：走近超声波传感器前方，观察门是否自动打开
-9. **BLE 模式测试**：打开手机 BLE APP，搜索 `MyESP32Mini`，连接后发送角度值测试舵机
+### Servo
+
+- **Write** `90`：舵机转到 90°，回显写入值
+- **Read**：返回舵机当前实时角度（`servo->getCurrentAngle()`），非最后一次写入值
 
 ---
 
-> 文档最后更新：2026-07-04
+## 9. 串口日志参考
+
+上电后串口监视器（115200）：
+
+| 日志 | 含义 |
+|------|------|
+| `AutoDoorBLE Starting...` | 系统启动 |
+| `Calibrate...` / `Sample 1 : 35.21` ... | 超声波标定 |
+| `Baseline = 35.17` | 标定完成 |
+| `BLE Advertising Started` | BLE 开始广播 |
+| `WiFi: trying HomeWiFi` | 尝试连接已保存的 WiFi |
+| `WiFi Connected, IP: 192.168.1.88` | 连接成功 |
+| `mDNS: http://autodoor.local` | 域名可用 |
+| `Web Server Started` | HTTP 服务就绪 |
+| `No WiFi. Use nRF Connect to:` | 进入配网模式 |
+| `WiFi Scan done` | 扫描完成 |
+| `BLE Read` | BLE 读操作 |
+| `BLE RX: CFG\|0\|password` | 收到配网指令 |
+| `Connect via BLE: HomeWiFi` | 解析出 SSID |
+| `WiFi saved: HomeWiFi` | 凭证已存 NVS |
+| `BLE Notify: STATE\|CONNECTING` | 推送连接状态 |
+| `BLE Notify: STATE\|CONNECTED\|192.168.1.88` | 连接成功通知 |
+| `BLE Stopped` | BLE 广播关闭 |
+| `BLE Connected` | 手机 BLE 已连接 |
+| `Distance=21.5cm Baseline=35.1cm Diff=13.6cm ...` | 调试输出（300ms） |
+
+---
+
+## 10. 使用步骤
+
+### 首次配网
+
+1. 按接线表连接硬件，**舵机独立 5V 供电**
+2. IDE 安装依赖库：`ESPAsyncWebServer`、`AsyncTCP`、`NimBLE-Arduino`、`ESP32Servo`
+3. 烧录程序，串口 115200 看到 `No WiFi. Use nRF Connect to:`
+4. 手机安装 **nRF Connect**（iOS/Android）
+5. 扫描 BLE → 连接 `MyESP32Mini`
+6. 找到 **WiFiScan** Characteristic → Read → 查看 WiFi 列表
+7. 找到 **WiFiConfig** Characteristic → Write → `CFG|0|your_password`
+8. 等待 Notify：`STATE|CONNECTED|192.168.1.xxx`
+9. Safari/Chrome 打开 `http://192.168.1.xxx` 进入控制台
+10. 配网完成，以后重启自动连 WiFi
+
+### 日常使用
+
+- **AUTO 模式**：走近传感器 → 门自动打开
+- **MANUAL 模式**：网页切 MANUAL → 滑块/按钮手动控制
+- **标定**：网页 CALIBRATE 按钮
+
+### 重新配网
+
+nRF Connect 连接后，向 WiFiConfig Characteristic 写入 `CFG|2|new_password` 更换路由器。
+（后续版本可通过网页操作）
+
+---
+
+> 文档最后更新：2025-07-06

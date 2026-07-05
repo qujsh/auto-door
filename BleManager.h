@@ -3,6 +3,8 @@
 
 #include <Arduino.h>
 #include <NimBLEDevice.h>
+#include "ServoControl.h"
+#include "WifiManager.h"
 
 class BleManager : public NimBLEServerCallbacks,
                    public NimBLECharacteristicCallbacks
@@ -11,38 +13,27 @@ public:
 
     BleManager();
 
-    /**
-     * 初始化BLE
-     */
     void begin(const char *deviceName,
                const char *serviceUUID,
-               const char *characteristicUUID);
+               const char *servoUUID,
+               const char *wifiScanUUID,
+               const char *wifiConfigUUID,
+               WifiManager *wifiMgr,
+               ServoControl *servoCtrl);
 
-    /**
-     * loop中调用（目前预留）
-     */
     void update();
 
-    /**
-     * 是否已连接
-     */
     bool isConnected() const;
 
-    /**
-     * 当前是否进入BLE控制模式
-     */
     bool isBleMode() const;
 
-    /**
-     * 消费新命令：若收到新指令则返回 true，同时通过 angle 返回目标角度
-     */
     bool hasNewCommand(int &angle);
 
-private:
+    void stop();
 
-    //--------------------------------------------------
-    // NimBLE 回调
-    //--------------------------------------------------
+    bool hasWiFiConfig(int &index, String &password);
+
+private:
 
     void onConnect(NimBLEServer *server,
                    NimBLEConnInfo &connInfo) override;
@@ -57,19 +48,28 @@ private:
     void onWrite(NimBLECharacteristic *characteristic,
                  NimBLEConnInfo &connInfo) override;
 
+    void parseWiFiConfig(const char *data);
+
 private:
 
     NimBLEServer *server;
     NimBLEService *service;
-    NimBLECharacteristic *characteristic;
+    NimBLECharacteristic *servoChar;
+    NimBLECharacteristic *wifiScanChar;
+    NimBLECharacteristic *wifiConfigChar;
+
+    WifiManager *wifi;
+    ServoControl *servo;
 
     volatile bool connected;
-
     volatile bool bleMode;
 
     volatile bool newCommand;
-
     volatile int targetAngle;
+
+    int configIndex;
+    String configPassword;
+    volatile bool newWiFiConfig;
 };
 
 #endif

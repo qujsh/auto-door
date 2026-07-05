@@ -4,7 +4,6 @@
 #include <Arduino.h>
 #include "Ultrasonic.h"
 #include "ServoControl.h"
-#include "BleManager.h"
 #include "Config.h"
 
 class DoorController
@@ -16,8 +15,7 @@ public:
      * 初始化
      */
     void begin(Ultrasonic *ultra,
-               ServoControl *servo,
-               BleManager *ble);
+               ServoControl *servo);
 
     /**
      * 主逻辑循环（loop调用）
@@ -43,8 +41,6 @@ private:
 
     void updateAutoMode(unsigned long now);
 
-    void updateBleMode();
-
     void setDoorOpen();
     void setDoorClose();
 
@@ -52,7 +48,6 @@ private:
 
     Ultrasonic *ultrasonic;
     ServoControl *servo;
-    BleManager *ble;
 
     DoorState state;
 
@@ -60,8 +55,6 @@ private:
 
     unsigned long lastSeenTime;
     unsigned long closeStartTime;
-
-    bool previousBleMode;
 
     bool manualMode;
 

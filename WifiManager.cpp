@@ -1,17 +1,22 @@
 #include "WifiManager.h"
 #include "Config.h"
 
-WifiManager::WifiManager()
-    : connected(false),
-      apMode(false),
-      lastRetryTime(0)
-{
-}
+static const unsigned long SCAN_INTERVAL = 30000;
 
 void WifiManager::begin()
 {
+    connected = false;
+    connecting = false;
+    connectStartTime = 0;
+    lastRetryTime = 0;
+
+    cachedNetworks = "EMPTY";
+    lastScanTime = 0;
+    connectStatus = "";
+    statusChanged = false;
+
     //=============================
-    // 读取 NVS 中保存的 WiFi 凭证
+    // 读 NVS → 尝试连接
     //=============================
     Preferences prefs;
     prefs.begin("wifi", true);
@@ -21,60 +26,80 @@ void WifiManager::begin()
 
     prefs.end();
 
-    //=============================
-    // 有凭证 → 尝试 STA 连接
-    //=============================
     if (savedSSID.length() > 0)
     {
         Serial.print("WiFi: trying ");
         Serial.println(savedSSID);
 
-        if (tryConnectSTA(savedSSID.c_str(), savedPass.c_str()))
-        {
-            startMDNS();
-            return;
-        }
-
-        Serial.println("WiFi: connection failed, fallback to AP");
+        tryConnect(savedSSID.c_str(), savedPass.c_str());
     }
-
-    //=============================
-    // 无凭证或连接失败 → AP 模式
-    //=============================
-    startAPMode();
 }
 
 void WifiManager::update()
 {
-    if (apMode)
+    unsigned long now = millis();
+
+    //=============================
+    // 定时 WiFi 扫描
+    //=============================
+    if (now - lastScanTime >= SCAN_INTERVAL || cachedNetworks == "")
     {
-        dnsServer.processNextRequest();
+        doScan();
+    }
+
+    //=============================
+    // 正在连接中
+    //=============================
+    if (connecting)
+    {
+        if (WiFi.status() == WL_CONNECTED)
+        {
+            connected = true;
+            connecting = false;
+
+            Serial.print("WiFi Connected, IP: ");
+            Serial.println(WiFi.localIP());
+
+            connectStatus = "STATE|CONNECTED|";
+            connectStatus += WiFi.localIP().toString();
+            statusChanged = true;
+
+            if (MDNS.begin(MDNS_HOSTNAME))
+            {
+                Serial.print("mDNS: http://");
+                Serial.print(MDNS_HOSTNAME);
+                Serial.println(".local");
+            }
+        }
+        else if (now - connectStartTime >= 15000)
+        {
+            connecting = false;
+
+            Serial.println("WiFi: timeout");
+
+            connectStatus = "STATE|FAILED|TIMEOUT";
+            statusChanged = true;
+        }
+
         return;
     }
 
     //=============================
-    // STA 模式：断线检测 + 自动重连
+    // 已连接 → 断线检测
     //=============================
-    if (WiFi.status() == WL_CONNECTED)
+    if (!connected)
     {
-        if (!connected)
-        {
-            connected = true;
-
-            Serial.print("WiFi Reconnected, IP: ");
-            Serial.println(WiFi.localIP());
-        }
+        return;
     }
-    else
+
+    if (WiFi.status() != WL_CONNECTED)
     {
-        if (connected)
-        {
-            connected = false;
+        connected = false;
 
-            Serial.println("WiFi Disconnected");
-        }
+        Serial.println("WiFi Disconnected");
 
-        unsigned long now = millis();
+        connectStatus = "STATE|DISCONNECTED";
+        statusChanged = true;
 
         if (now - lastRetryTime >= 30000)
         {
@@ -84,101 +109,84 @@ void WifiManager::update()
     }
 }
 
-//=====================================================
-// STA 连接（阻塞 15 秒）
-//=====================================================
-bool WifiManager::tryConnectSTA(const char *ssid,
-                                const char *password)
+void WifiManager::doScan()
+{
+    lastScanTime = millis();
+
+    int n = WiFi.scanNetworks();
+
+    if (n <= 0)
+    {
+        cachedNetworks = "EMPTY";
+        return;
+    }
+
+    // 按信号强度排序
+    int indices[n];
+    for (int i = 0; i < n; i++) indices[i] = i;
+
+    for (int i = 0; i < n - 1; i++)
+    {
+        for (int j = i + 1; j < n; j++)
+        {
+            if (WiFi.RSSI(indices[j]) > WiFi.RSSI(indices[i]))
+            {
+                int t = indices[i];
+                indices[i] = indices[j];
+                indices[j] = t;
+            }
+        }
+    }
+
+    cachedNetworks = "";
+
+    for (int i = 0; i < n; i++)
+    {
+        if (i > 0) cachedNetworks += "\n";
+
+        int idx = indices[i];
+
+        cachedNetworks += "SCAN|";
+        cachedNetworks += String(i);
+        cachedNetworks += "|";
+        cachedNetworks += WiFi.SSID(idx);
+        cachedNetworks += "|";
+        cachedNetworks += String(WiFi.RSSI(idx));
+        cachedNetworks += "|";
+
+        switch (WiFi.encryptionType(idx))
+        {
+            case WIFI_AUTH_OPEN:            cachedNetworks += "OPEN";   break;
+            case WIFI_AUTH_WEP:             cachedNetworks += "WEP";    break;
+            case WIFI_AUTH_WPA_PSK:         cachedNetworks += "WPA";    break;
+            case WIFI_AUTH_WPA2_PSK:        cachedNetworks += "WPA2";   break;
+            case WIFI_AUTH_WPA_WPA2_PSK:    cachedNetworks += "WPA2";   break;
+            case WIFI_AUTH_WPA2_ENTERPRISE: cachedNetworks += "WPA2-E"; break;
+            case WIFI_AUTH_WPA3_PSK:        cachedNetworks += "WPA3";   break;
+            default:                        cachedNetworks += "?";      break;
+        }
+    }
+
+    WiFi.scanDelete();
+
+    Serial.println("WiFi Scan done");
+}
+
+bool WifiManager::tryConnect(const char *ssid,
+                             const char *password)
 {
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, password);
 
-    unsigned long start = millis();
+    connecting = true;
+    connectStartTime = millis();
 
-    while (WiFi.status() != WL_CONNECTED && millis() - start < 15000)
-    {
-        delay(500);
-        Serial.print(".");
-    }
+    connectStatus = "STATE|CONNECTING";
+    statusChanged = true;
 
-    Serial.println();
-
-    if (WiFi.status() == WL_CONNECTED)
-    {
-        connected = true;
-        apMode = false;
-
-        Serial.print("WiFi Connected, IP: ");
-        Serial.println(WiFi.localIP());
-
-        return true;
-    }
-
-    return false;
+    return true;
 }
 
-//=====================================================
-// AP 模式 + Captive Portal
-//=====================================================
-void WifiManager::startAPMode()
-{
-    apMode = true;
-    connected = false;
-
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP(AP_SSID, AP_PASSWORD);
-
-    dnsServer.start(53, "*", WiFi.softAPIP());
-
-    Serial.println("AP Mode: AutoDoor_Setup");
-    Serial.print("AP IP: ");
-    Serial.println(WiFi.softAPIP());
-}
-
-//=====================================================
-// mDNS 广播（http://autodoor.local）
-//=====================================================
-void WifiManager::startMDNS()
-{
-    if (MDNS.begin(MDNS_HOSTNAME))
-    {
-        Serial.print("mDNS: http://");
-        Serial.print(MDNS_HOSTNAME);
-        Serial.println(".local");
-    }
-    else
-    {
-        Serial.println("mDNS: failed");
-    }
-}
-
-//=====================================================
-// 附近 WiFi 扫描
-//=====================================================
-String WifiManager::scanNetworks()
-{
-    int n = WiFi.scanNetworks();
-
-    String json = "[";
-    for (int i = 0; i < n; i++)
-    {
-        if (i > 0) json += ",";
-        json += "{";
-        json += "\"ssid\":\"" + WiFi.SSID(i) + "\",";
-        json += "\"rssi\":" + String(WiFi.RSSI(i)) + ",";
-        json += "\"secure\":" + String(WiFi.encryptionType(i) != WIFI_AUTH_OPEN ? "true" : "false");
-        json += "}";
-    }
-    json += "]";
-
-    WiFi.scanDelete();
-
-    return json;
-}
-
-//=====================================================
-// 保存凭证到 NVS
-//=====================================================
 bool WifiManager::saveCredentials(const char *ssid,
                                   const char *password)
 {
@@ -196,26 +204,39 @@ bool WifiManager::saveCredentials(const char *ssid,
     return true;
 }
 
-//=====================================================
-// 状态查询
-//=====================================================
 bool WifiManager::isConnected() const
 {
-    return connected;
+    return connected && WiFi.status() == WL_CONNECTED;
 }
 
-bool WifiManager::isAPMode() const
+bool WifiManager::isConnecting() const
 {
-    return apMode;
+    return connecting;
 }
 
 String WifiManager::getLocalIP() const
 {
-    if (apMode) return WiFi.softAPIP().toString();
     return WiFi.localIP().toString();
 }
 
 int WifiManager::getRSSI() const
 {
     return WiFi.RSSI();
+}
+
+String WifiManager::getCachedNetworks()
+{
+    return cachedNetworks;
+}
+
+String WifiManager::getConnectStatus()
+{
+    return connectStatus;
+}
+
+bool WifiManager::hasStatusChanged()
+{
+    bool temp = statusChanged;
+    statusChanged = false;
+    return temp;
 }

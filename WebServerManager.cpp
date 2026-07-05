@@ -23,28 +23,10 @@ void WebServerManager::begin(DoorController *doorCtrl,
 
     server->begin();
 
-    if (!wifi->isAPMode())
-    {
-        Serial.println("Web Server Started");
-    }
+    Serial.println("Web Server Started");
 }
 
 void WebServerManager::setupRoutes()
-{
-    if (wifi->isAPMode())
-    {
-        setupAPRoutes();
-    }
-    else
-    {
-        setupControlRoutes();
-    }
-}
-
-//=====================================================
-// STA 模式：控制面板
-//=====================================================
-void WebServerManager::setupControlRoutes()
 {
     server->on("/", HTTP_GET, [this](AsyncWebServerRequest *request) {
         handleRoot(request);
@@ -74,61 +56,17 @@ void WebServerManager::setupControlRoutes()
     });
 }
 
-//=====================================================
-// AP 模式：配网 + Captive Portal
-//=====================================================
-void WebServerManager::setupAPRoutes()
-{
-    // WiFi 扫描
-    server->on("/api/wifi/scan", HTTP_GET, [this](AsyncWebServerRequest *request) {
-        handleWiFiScan(request);
-    });
-
-    // WiFi 保存
-    server->on(
-        "/api/wifi/save",
-        HTTP_POST,
-        [](AsyncWebServerRequest *request) {},
-        nullptr,
-        [this](AsyncWebServerRequest *request,
-               uint8_t *data, size_t len,
-               size_t index, size_t total) {
-            handleWiFiSave(request, data, len, index, total);
-        });
-
-    // Captive Portal：所有其他请求返回配网页面
-    server->onNotFound([this](AsyncWebServerRequest *request) {
-        handleRoot(request);
-    });
-}
-
-//=====================================================
-// 控制页面
-//=====================================================
 void WebServerManager::handleRoot(AsyncWebServerRequest *request)
 {
-    if (wifi->isAPMode())
-    {
-        request->send_P(200, "text/html", WIFI_SETUP_HTML);
-    }
-    else
-    {
-        request->send_P(200, "text/html", INDEX_HTML);
-    }
+    request->send_P(200, "text/html", INDEX_HTML);
 }
 
-//=====================================================
-// 状态查询
-//=====================================================
 void WebServerManager::handleStatus(AsyncWebServerRequest *request)
 {
     String json = buildStatusJson();
     request->send(200, "application/json", json);
 }
 
-//=====================================================
-// 舵机控制
-//=====================================================
 void WebServerManager::handleServo(AsyncWebServerRequest *request)
 {
     if (!request->hasParam("angle"))
@@ -147,9 +85,6 @@ void WebServerManager::handleServo(AsyncWebServerRequest *request)
     request->send(200, "application/json", "{\"ok\":true}");
 }
 
-//=====================================================
-// 模式切换
-//=====================================================
 void WebServerManager::handleMode(AsyncWebServerRequest *request,
                                   uint8_t *data,
                                   size_t len,
@@ -164,9 +99,6 @@ void WebServerManager::handleMode(AsyncWebServerRequest *request,
     request->send(200, "application/json", "{\"ok\":true}");
 }
 
-//=====================================================
-// 远程标定
-//=====================================================
 void WebServerManager::handleCalibrate(AsyncWebServerRequest *request)
 {
     door->triggerCalibrate();
@@ -179,61 +111,6 @@ void WebServerManager::handleCalibrate(AsyncWebServerRequest *request)
     request->send(200, "application/json", json);
 }
 
-//=====================================================
-// WiFi 扫描
-//=====================================================
-void WebServerManager::handleWiFiScan(AsyncWebServerRequest *request)
-{
-    String json = wifi->scanNetworks();
-    request->send(200, "application/json", json);
-}
-
-//=====================================================
-// WiFi 凭证保存
-//=====================================================
-void WebServerManager::handleWiFiSave(AsyncWebServerRequest *request,
-                                      uint8_t *data,
-                                      size_t len,
-                                      size_t /*index*/,
-                                      size_t /*total*/)
-{
-    String body;
-    body.concat((char *)data, len);
-
-    int ssidStart = body.indexOf("\"ssid\":\"");
-    int passStart = body.indexOf("\"pass\":\"");
-
-    if (ssidStart < 0)
-    {
-        request->send(400, "application/json", "{\"error\":\"missing ssid\"}");
-        return;
-    }
-
-    ssidStart += 8;
-    int ssidEnd = body.indexOf("\"", ssidStart);
-
-    String ssid = body.substring(ssidStart, ssidEnd);
-
-    String password;
-
-    if (passStart >= 0)
-    {
-        passStart += 8;
-        int passEnd = body.indexOf("\"", passStart);
-        password = body.substring(passStart, passEnd);
-    }
-
-    wifi->saveCredentials(ssid.c_str(), password.c_str());
-
-    request->send(200, "application/json", "{\"ok\":true}");
-
-    delay(500);
-    ESP.restart();
-}
-
-//=====================================================
-// JSON 构建
-//=====================================================
 String WebServerManager::buildStatusJson()
 {
     String s = "{";
