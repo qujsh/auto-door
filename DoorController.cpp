@@ -9,8 +9,14 @@ DoorController::DoorController()
       lastSeenTime(0),
       closeStartTime(0),
       previousBleMode(false),
+      manualMode(false),
       detecting(false),
-      detectStartTime(0)
+      detectStartTime(0),
+      currentDistance(-1),
+      currentDiff(0),
+      currentDetect(false),
+      currentPresent(false),
+      lastPrintTime(0)
 {
 }
 
@@ -30,6 +36,7 @@ void DoorController::begin(Ultrasonic *ultra,
     closeStartTime = 0;
 
     previousBleMode = false;
+    manualMode = false;
     detecting = false;
     detectStartTime = 0;
 
@@ -38,6 +45,11 @@ void DoorController::begin(Ultrasonic *ultra,
 
 void DoorController::update()
 {
+    if (manualMode)
+    {
+        return;
+    }
+
     unsigned long now = millis();
 
     bool isBle = ble->isBleMode();
@@ -93,6 +105,8 @@ void DoorController::updateAutoMode(unsigned long now)
 {
     float d = ultrasonic->readDistance();
 
+    currentDistance = d;
+
     if (d < 0)
     {
         return;
@@ -100,17 +114,11 @@ void DoorController::updateAutoMode(unsigned long now)
 
     float diff = baseline - d;
 
+    currentDiff = diff;
+
     bool detect = (diff >= DISTANCE_CHANGE_THRESHOLD);
 
-    if (detect)
-    {
-        Serial.print("DIST: baseline=");
-        Serial.print(baseline);
-        Serial.print(" current=");
-        Serial.print(d);
-        Serial.print(" diff=");
-        Serial.println(diff);
-    }
+    currentDetect = detect;
 
     //=============================
     // 防抖：连续检测持续 DETECT_DEBOUNCE ms 后才确认有人
@@ -134,6 +142,45 @@ void DoorController::updateAutoMode(unsigned long now)
     }
 
     bool isPresent = (now - lastSeenTime) < PRESENCE_TIMEOUT;
+
+    currentPresent = isPresent;
+
+    if (DEBUG_DISTANCE)
+    {
+        if (now - lastPrintTime >= DEBUG_PRINT_INTERVAL)
+        {
+            lastPrintTime = now;
+
+            Serial.print("Distance=");
+            Serial.print(currentDistance, 2);
+            Serial.print("cm  Baseline=");
+            Serial.print(baseline, 2);
+            Serial.print("cm  Diff=");
+            Serial.print(currentDiff, 2);
+            Serial.print("cm  Detect=");
+            Serial.print(currentDetect ? "YES" : "NO");
+            Serial.print("  Present=");
+            Serial.print(currentPresent ? "YES" : "NO");
+            Serial.print("  Door=");
+
+            switch (state)
+            {
+                case DoorState::CLOSED:
+                    Serial.print("CLOSED");
+                    break;
+                case DoorState::OPEN:
+                    Serial.print("OPEN");
+                    break;
+                case DoorState::WAIT_CLOSE:
+                    Serial.print("WAIT_CLOSE");
+                    break;
+            }
+
+            Serial.print("  Servo=");
+            Serial.print(servo->getCurrentAngle());
+            Serial.println("°");
+        }
+    }
 
     //=============================
     // 状态机
@@ -190,4 +237,64 @@ void DoorController::setDoorOpen()
 void DoorController::setDoorClose()
 {
     servo->setTargetAngle(SERVO_CLOSE_ANGLE);
+}
+
+//=====================================================
+// 状态查询（Web API）
+//=====================================================
+float DoorController::getCurrentDistance() const
+{
+    return currentDistance;
+}
+
+float DoorController::getBaseline() const
+{
+    return baseline;
+}
+
+float DoorController::getCurrentDiff() const
+{
+    return currentDiff;
+}
+
+bool DoorController::getCurrentDetect() const
+{
+    return currentDetect;
+}
+
+bool DoorController::getCurrentPresent() const
+{
+    return currentPresent;
+}
+
+DoorState DoorController::getDoorState() const
+{
+    return state;
+}
+
+//=====================================================
+// Manual 模式
+//=====================================================
+void DoorController::setManualMode(bool manual)
+{
+    manualMode = manual;
+}
+
+bool DoorController::isManualMode() const
+{
+    return manualMode;
+}
+
+//=====================================================
+// 远程标定
+//=====================================================
+void DoorController::triggerCalibrate()
+{
+    ultrasonic->calibrate();
+
+    baseline = ultrasonic->getBaseline();
+
+    state = DoorState::CLOSED;
+
+    detecting = false;
 }

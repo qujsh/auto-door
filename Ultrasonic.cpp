@@ -125,13 +125,22 @@ void Ultrasonic::calibrate()
 
     uint8_t count = 0;
 
+    Serial.println("Calibrate...");
+
     while (count < SAMPLE_COUNT)
     {
         float d = readRaw();
 
         if (d > 0)
         {
-            values[count++] = d;
+            values[count] = d;
+
+            Serial.print("Sample ");
+            Serial.print(count + 1);
+            Serial.print(" : ");
+            Serial.println(d, 2);
+
+            count++;
         }
 
         delay(50);
@@ -155,6 +164,11 @@ void Ultrasonic::calibrate()
 
         sum += values[i];
     }
+
+    Serial.print("Min      : ");
+    Serial.println(minValue, 2);
+    Serial.print("Max      : ");
+    Serial.println(maxValue, 2);
 
     baseline = (sum - minValue - maxValue) / (SAMPLE_COUNT - 2);
 

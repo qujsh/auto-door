@@ -55,4 +55,26 @@ enum class DoorState
     WAIT_CLOSE
 };
 
+//=====================================================
+// WiFi Manager
+//=====================================================
+constexpr char AP_SSID[]     = "AutoDoor_Setup";
+constexpr char AP_PASSWORD[] = "";
+
+//=====================================================
+// mDNS
+//=====================================================
+constexpr char MDNS_HOSTNAME[] = "autodoor";
+
+//=====================================================
+// Web Server
+//=====================================================
+constexpr uint16_t WEB_PORT = 80;
+
+//=====================================================
+// 调试开关
+//=====================================================
+constexpr bool DEBUG_DISTANCE = true;
+constexpr unsigned long DEBUG_PRINT_INTERVAL = 300;
+
 #endif

@@ -24,6 +24,21 @@ public:
      */
     void update();
 
+    // ---- 状态查询（Web API 使用）----
+    float getCurrentDistance() const;
+    float getBaseline() const;
+    float getCurrentDiff() const;
+    bool getCurrentDetect() const;
+    bool getCurrentPresent() const;
+    DoorState getDoorState() const;
+
+    // ---- Manual 模式 ----
+    void setManualMode(bool manual);
+    bool isManualMode() const;
+
+    // ---- 远程标定 ----
+    void triggerCalibrate();
+
 private:
 
     void updateAutoMode(unsigned long now);
@@ -48,8 +63,16 @@ private:
 
     bool previousBleMode;
 
+    bool manualMode;
+
     bool detecting;
     unsigned long detectStartTime;
+
+    float currentDistance;
+    float currentDiff;
+    bool currentDetect;
+    bool currentPresent;
+    unsigned long lastPrintTime;
 };
 
 #endif

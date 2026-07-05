@@ -5,6 +5,8 @@
 #include "Ultrasonic.h"
 #include "BleManager.h"
 #include "DoorController.h"
+#include "WifiManager.h"
+#include "WebServerManager.h"
 
 //=====================================================
 // 全局对象
@@ -13,6 +15,8 @@ ServoControl servo;
 Ultrasonic ultrasonic;
 BleManager ble;
 DoorController door;
+WifiManager wifi;
+WebServerManager web;
 
 //=====================================================
 // 初始化
@@ -50,7 +54,7 @@ void setup()
     ultrasonic.calibrate();
 
     //=============================
-    // BLE
+    // BLE（保留，向后兼容）
     //=============================
     ble.begin(
         BLE_DEVICE_NAME,
@@ -67,6 +71,32 @@ void setup()
         &ble
     );
 
+    //=============================
+    // WiFi（自动：NVS凭证 → STA / AP）
+    //=============================
+    wifi.begin();
+
+    //=============================
+    // Web Server
+    //=============================
+    web.begin(&door, &servo, &wifi);
+
+    if (wifi.isConnected())
+    {
+        Serial.print("Web: http://");
+        Serial.print(wifi.getLocalIP());
+        Serial.print("  or  http://");
+        Serial.print(MDNS_HOSTNAME);
+        Serial.println(".local");
+    }
+    else
+    {
+        Serial.print("AP Mode, connect to: ");
+        Serial.println(AP_SSID);
+        Serial.print("Then open: http://");
+        Serial.println(wifi.getLocalIP());
+    }
+
     Serial.println("System Ready");
 }
 
@@ -75,12 +105,11 @@ void setup()
 //=====================================================
 void loop()
 {
-    // 1. BLE更新（目前内部轻量）
+    wifi.update();
+
     ble.update();
 
-    // 2. 舵机非阻塞更新
     servo.update();
 
-    // 3. 门逻辑（自动 / BLE）
     door.update();
 }
