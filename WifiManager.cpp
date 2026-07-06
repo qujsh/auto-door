@@ -30,6 +30,8 @@ void WifiManager::begin()
 
     if (savedSSID.length() > 0)
     {
+        doScan();
+
         Serial.print("WiFi: trying ");
         Serial.println(savedSSID);
 
@@ -76,6 +78,8 @@ void WifiManager::update()
         else if (now - connectStartTime >= 15000)
         {
             connecting = false;
+
+            WiFi.disconnect();
 
             Serial.println("WiFi: timeout");
 
@@ -130,7 +134,8 @@ void WifiManager::doScan()
 
     if (n <= 0)
     {
-        cachedNetworks = "EMPTY";
+        cachedNetworks = "";
+        Serial.println("WiFi Scan: no networks");
         return;
     }
 
