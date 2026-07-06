@@ -46,7 +46,7 @@ void WifiManager::update()
     //=============================
     // 定时 WiFi 扫描
     //=============================
-    if (now - lastScanTime >= SCAN_INTERVAL || cachedNetworks == "")
+    if (now - lastScanTime >= SCAN_INTERVAL)
     {
         doScan();
     }
@@ -134,8 +134,13 @@ void WifiManager::doScan()
 
     if (n <= 0)
     {
-        cachedNetworks = "";
         Serial.println("WiFi Scan: no networks");
+
+        if (cachedNetworks.length() == 0)
+        {
+            lastScanTime = millis() - SCAN_INTERVAL + 5000;
+        }
+
         return;
     }
 
@@ -160,7 +165,7 @@ void WifiManager::doScan()
 
     for (int i = 0; i < n; i++)
     {
-        if (i > 0) cachedNetworks += "\n";
+        if (i > 0)         cachedNetworks += "\r\n";
 
         int idx = indices[i];
 

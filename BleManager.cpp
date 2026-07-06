@@ -137,7 +137,7 @@ void BleManager::onRead(NimBLECharacteristic *characteristic,
 
     if (characteristic == wifiScanChar && wifi)
     {
-        String header = "\n输入格式: 索引+密码\n";
+        String header = "\r\n输入格式: 索引+密码\r\n";
         String list   = wifi->getCachedNetworks();
 
         characteristic->setValue((header + list).c_str());
