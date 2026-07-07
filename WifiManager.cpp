@@ -77,10 +77,12 @@ void WifiManager::update()
 
             Serial.println("WiFi: timeout");
 
-            WiFi.disconnect(true, true);
+            WiFi.disconnect();
+            delay(100);
+            WiFi.mode(WIFI_OFF);
             delay(500);
             WiFi.mode(WIFI_STA);
-            delay(200);
+            delay(500);
 
             connectStatus = "STATE|FAILED|TIMEOUT";
             statusChanged = true;
@@ -106,6 +108,7 @@ void WifiManager::update()
         if (n == -2)
         {
             Serial.println("WiFi Scan: failed to start");
+            scanning = false;
             return;
         }
 
@@ -154,6 +157,9 @@ void WifiManager::startScan()
 {
     if (scanning) return;
 
+    WiFi.disconnect();
+    delay(200);
+
     lastScanTime = millis();
     scanning = true;
 
@@ -163,14 +169,7 @@ void WifiManager::startScan()
     connectStatus = "STATE|SCANNING";
     statusChanged = true;
 
-    int ret = WiFi.scanNetworks(true);
-
-    if (ret == WIFI_SCAN_FAILED)
-    {
-        Serial.println("scan start failed");
-        scanning = false;
-        return;
-    }
+    WiFi.scanNetworks(true);
 
     Serial.println("WiFi Scan started");
 }
