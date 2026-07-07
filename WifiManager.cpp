@@ -75,7 +75,9 @@ void WifiManager::update()
         {
             connecting = false;
 
-            WiFi.disconnect(true, true);
+            WiFi.disconnect(false, false);
+            delay(1000);
+            WiFi.mode(WIFI_STA);
 
             Serial.println("WiFi: timeout");
 
@@ -99,6 +101,14 @@ void WifiManager::update()
         }
 
         scanning = false;
+
+        if (n == -2)
+        {
+            Serial.println("WiFi Scan: failed to start, retry");
+            startScan();
+            return;
+        }
+
         processScanResult(n);
         return;
     }
@@ -143,6 +153,10 @@ void WifiManager::update()
 void WifiManager::startScan()
 {
     lastScanTime = millis();
+
+    WiFi.mode(WIFI_STA);
+    delay(200);
+
     scanning = true;
 
     connectStatus = "STATE|SCANNING";
@@ -199,6 +213,17 @@ void WifiManager::processScanResult(int n)
                 indices[j] = t;
             }
         }
+    }
+
+    Serial.print("Scan count=");
+    Serial.println(n);
+
+    for (int i = 0; i < n; i++)
+    {
+        Serial.print("  ");
+        Serial.print(WiFi.SSID(i));
+        Serial.print("  ");
+        Serial.println(WiFi.RSSI(i));
     }
 
     cachedNetworks = "";
