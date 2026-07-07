@@ -156,6 +156,20 @@ void WifiManager::startScan()
 }
 
 //=====================================================
+// RSSI → 中文标签
+//=====================================================
+static String rssiToLabel(int rssi)
+{
+    if (rssi >= -30) return "非常强";
+    if (rssi >= -40) return "很强";
+    if (rssi >= -50) return "很好";
+    if (rssi >= -60) return "良好";
+    if (rssi >= -70) return "一般";
+    if (rssi >= -80) return "比较差";
+    return "很差";
+}
+
+//=====================================================
 // 处理异步扫描结果
 //=====================================================
 void WifiManager::processScanResult(int n)
@@ -210,20 +224,6 @@ void WifiManager::processScanResult(int n)
     WiFi.scanDelete();
 
     Serial.println("WiFi Scan done");
-}
-
-//=====================================================
-// RSSI → 中文标签
-//=====================================================
-static String rssiToLabel(int rssi)
-{
-    if (rssi >= -30) return "非常强";
-    if (rssi >= -40) return "很强";
-    if (rssi >= -50) return "很好";
-    if (rssi >= -60) return "良好";
-    if (rssi >= -70) return "一般";
-    if (rssi >= -80) return "比较差";
-    return "很差";
 }
 
 //=====================================================
