@@ -7,6 +7,13 @@ void WifiManager::begin()
 {
     WiFi.mode(WIFI_STA);
 
+    WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
+        Serial.print("WiFi Event=");
+        Serial.print(event);
+        Serial.print(" reason=");
+        Serial.println(info.wifi_sta_disconnected.reason);
+    });
+
     connected = false;
     connecting = false;
     scanning = false;
@@ -73,6 +80,9 @@ void WifiManager::update()
         }
         else if (now - connectStartTime >= 15000)
         {
+            Serial.print("WiFi status=");
+            Serial.println(WiFi.status());
+
             connecting = false;
 
             Serial.println("WiFi: timeout");
@@ -262,10 +272,14 @@ void WifiManager::processScanResult(int n)
 bool WifiManager::tryConnect(const char *ssid,
                              const char *password)
 {
-    WiFi.scanDelete();
-
+    WiFi.disconnect(false, false);
+    delay(100);
     WiFi.mode(WIFI_STA);
+    delay(100);
     WiFi.begin(ssid, password);
+
+    Serial.print("WiFi connect: ");
+    Serial.println(ssid);
 
     connecting = true;
     connectStartTime = millis();
