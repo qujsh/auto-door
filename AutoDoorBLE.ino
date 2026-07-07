@@ -30,53 +30,6 @@ WebServerManager web;
 SystemState sysState = CONFIGURING;
 
 //=====================================================
-// 根据索引从缓存列表中解析 SSID
-//=====================================================
-String getSSIDbyIndex(int targetIndex)
-{
-    String networks = wifi.getCachedNetworks();
-
-    int start = 0;
-
-    for (int i = 0; i <= targetIndex; i++)
-    {
-        int end = networks.indexOf('\n', start);
-
-        if (i == targetIndex)
-        {
-            String line;
-
-            if (end < 0)
-            {
-                line = networks.substring(start);
-            }
-            else
-            {
-                line = networks.substring(start, end);
-            }
-
-            // 格式: 0|Redmi_E490|良好
-            //       p1  p2
-            int p1 = line.indexOf('|');
-            int p2 = line.indexOf('|', p1 + 1);
-
-            if (p1 >= 0 && p2 > p1)
-            {
-                return line.substring(p1 + 1, p2);
-            }
-
-            return "";
-        }
-
-        if (end < 0) break;
-
-        start = end + 1;
-    }
-
-    return "";
-}
-
-//=====================================================
 // 初始化
 //=====================================================
 void setup()
@@ -181,7 +134,7 @@ void loop()
 
     if (ble.hasWiFiConfig(index, password))
     {
-        String ssid = getSSIDbyIndex(index);
+        String ssid = wifi.getSSIDByIndex(index);
 
         if (ssid.length() > 0)
         {

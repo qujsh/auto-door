@@ -9,10 +9,12 @@ void WifiManager::begin()
 
     connected = false;
     connecting = false;
+    scanning = false;
     connectStartTime = 0;
     lastRetryTime = 0;
 
     cachedNetworks = "";
+    scannedSSIDs.clear();
     lastScanTime = 0;
     connectStatus = "";
     statusChanged = false;
@@ -30,12 +32,16 @@ void WifiManager::begin()
 
     if (savedSSID.length() > 0)
     {
-        doScan();
+        startScan();
 
         Serial.print("WiFi: trying ");
         Serial.println(savedSSID);
 
         tryConnect(savedSSID.c_str(), savedPass.c_str());
+    }
+    else
+    {
+        startScan();
     }
 }
 
@@ -44,11 +50,29 @@ void WifiManager::update()
     unsigned long now = millis();
 
     //=============================
-    // 定时 WiFi 扫描
+    // 异步扫描：检查完成状态
+    //=============================
+    if (scanning)
+    {
+        int n = WiFi.scanComplete();
+
+        if (n == -1)
+        {
+            return;
+        }
+
+        scanning = false;
+        processScanResult(n);
+        return;
+    }
+
+    //=============================
+    // 定时触发扫描
     //=============================
     if (now - lastScanTime >= SCAN_INTERVAL)
     {
-        doScan();
+        startScan();
+        return;
     }
 
     //=============================
@@ -79,7 +103,7 @@ void WifiManager::update()
         {
             connecting = false;
 
-            WiFi.disconnect();
+            WiFi.disconnect(true, true);
 
             Serial.println("WiFi: timeout");
 
@@ -115,23 +139,27 @@ void WifiManager::update()
     }
 }
 
-static String rssiToLabel(int rssi)
-{
-    if (rssi >= -30) return "非常强";
-    if (rssi >= -40) return "很强";
-    if (rssi >= -50) return "很好";
-    if (rssi >= -60) return "良好";
-    if (rssi >= -70) return "一般";
-    if (rssi >= -80) return "比较差";
-    return "很差";
-}
-
-void WifiManager::doScan()
+//=====================================================
+// 启动异步扫描
+//=====================================================
+void WifiManager::startScan()
 {
     lastScanTime = millis();
+    scanning = true;
 
-    int n = WiFi.scanNetworks();
+    connectStatus = "STATE|SCANNING";
+    statusChanged = true;
 
+    WiFi.scanNetworks(true);
+
+    Serial.println("WiFi Scan started");
+}
+
+//=====================================================
+// 处理异步扫描结果
+//=====================================================
+void WifiManager::processScanResult(int n)
+{
     if (n <= 0)
     {
         Serial.println("WiFi Scan: no networks");
@@ -162,10 +190,11 @@ void WifiManager::doScan()
     }
 
     cachedNetworks = "";
+    scannedSSIDs.clear();
 
     for (int i = 0; i < n; i++)
     {
-        if (i > 0)         cachedNetworks += "\r\n";
+        if (i > 0) cachedNetworks += "\r\n";
 
         int idx = indices[i];
 
@@ -174,6 +203,8 @@ void WifiManager::doScan()
         cachedNetworks += WiFi.SSID(idx);
         cachedNetworks += "|";
         cachedNetworks += rssiToLabel(WiFi.RSSI(idx));
+
+        scannedSSIDs.push_back(WiFi.SSID(idx));
     }
 
     WiFi.scanDelete();
@@ -181,9 +212,28 @@ void WifiManager::doScan()
     Serial.println("WiFi Scan done");
 }
 
+//=====================================================
+// RSSI → 中文标签
+//=====================================================
+static String rssiToLabel(int rssi)
+{
+    if (rssi >= -30) return "非常强";
+    if (rssi >= -40) return "很强";
+    if (rssi >= -50) return "很好";
+    if (rssi >= -60) return "良好";
+    if (rssi >= -70) return "一般";
+    if (rssi >= -80) return "比较差";
+    return "很差";
+}
+
+//=====================================================
+// 连接
+//=====================================================
 bool WifiManager::tryConnect(const char *ssid,
                              const char *password)
 {
+    WiFi.scanDelete();
+
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, password);
 
@@ -196,6 +246,9 @@ bool WifiManager::tryConnect(const char *ssid,
     return true;
 }
 
+//=====================================================
+// NVS 保存
+//=====================================================
 bool WifiManager::saveCredentials(const char *ssid,
                                   const char *password)
 {
@@ -211,6 +264,19 @@ bool WifiManager::saveCredentials(const char *ssid,
     Serial.println(ssid);
 
     return true;
+}
+
+//=====================================================
+// 按显示索引获取真实 SSID
+//=====================================================
+String WifiManager::getSSIDByIndex(int index)
+{
+    if (index >= 0 && index < (int)scannedSSIDs.size())
+    {
+        return scannedSSIDs[index];
+    }
+
+    return "";
 }
 
 bool WifiManager::isConnected() const

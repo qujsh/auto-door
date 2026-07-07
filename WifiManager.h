@@ -4,6 +4,7 @@
 #include <WiFi.h>
 #include <ESPmDNS.h>
 #include <Preferences.h>
+#include <vector>
 
 class WifiManager
 {
@@ -28,21 +29,28 @@ public:
 
     String getCachedNetworks();
 
+    String getSSIDByIndex(int index);
+
     String getConnectStatus();
 
     bool hasStatusChanged();
 
 private:
-    void doScan();
+    void startScan();
+
+    void processScanResult(int n);
 
     bool connected;
     bool connecting;
+    bool scanning;
 
     unsigned long connectStartTime;
     unsigned long lastRetryTime;
 
     String cachedNetworks;
     unsigned long lastScanTime;
+
+    std::vector<String> scannedSSIDs;
 
     String connectStatus;
     bool statusChanged;

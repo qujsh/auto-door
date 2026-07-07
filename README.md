@@ -454,6 +454,7 @@ door->isManualMode() == true:
 ### WiFiConfig Notify 状态
 
 ```
+STATE|SCANNING
 STATE|CONNECTING
 STATE|CONNECTED|192.168.1.88   ← ESP32 的 IP，直接复制到浏览器
 STATE|FAILED|TIMEOUT

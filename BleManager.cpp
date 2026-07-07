@@ -24,6 +24,7 @@ void BleManager::begin(const char *deviceName,
     NimBLEDevice::init(deviceName);
 
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+    NimBLEDevice::setMTU(256);
 
     server = NimBLEDevice::createServer();
     server->setCallbacks(this);
@@ -67,7 +68,7 @@ void BleManager::update()
     //=============================
     // 推送 WiFi 连接状态
     //=============================
-    if (wifi && wifi->hasStatusChanged())
+    if (wifi && wifi->hasStatusChanged() && connected)
     {
         String status = wifi->getConnectStatus();
 
@@ -137,10 +138,17 @@ void BleManager::onRead(NimBLECharacteristic *characteristic,
 
     if (characteristic == wifiScanChar && wifi)
     {
-        String header = "\r\n输入格式: 索引+密码\r\n";
-        String list   = wifi->getCachedNetworks();
+        String list = wifi->getCachedNetworks();
 
-        characteristic->setValue((header + list).c_str());
+        if (list.length() == 0)
+        {
+            characteristic->setValue("\r\n扫描中，请稍后重试...\r\n");
+        }
+        else
+        {
+            String header = "\r\n输入格式: 索引+密码\r\n";
+            characteristic->setValue((header + list).c_str());
+        }
     }
 }
 
@@ -178,6 +186,7 @@ void BleManager::onWrite(NimBLECharacteristic *characteristic,
 void BleManager::parseWiFiConfig(const char *data)
 {
     String raw(data);
+    raw.trim();
 
     int plusPos = raw.indexOf('+');
 
@@ -188,7 +197,10 @@ void BleManager::parseWiFiConfig(const char *data)
     }
 
     configIndex = raw.substring(0, plusPos).toInt();
+
     configPassword = raw.substring(plusPos + 1);
+    configPassword.trim();
+
     newWiFiConfig = true;
 
     Serial.print("BLE Config: index=");
