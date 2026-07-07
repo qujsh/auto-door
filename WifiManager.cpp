@@ -32,8 +32,6 @@ void WifiManager::begin()
 
     if (savedSSID.length() > 0)
     {
-        startScan();
-
         Serial.print("WiFi: trying ");
         Serial.println(savedSSID);
 
@@ -50,33 +48,7 @@ void WifiManager::update()
     unsigned long now = millis();
 
     //=============================
-    // 异步扫描：检查完成状态
-    //=============================
-    if (scanning)
-    {
-        int n = WiFi.scanComplete();
-
-        if (n == -1)
-        {
-            return;
-        }
-
-        scanning = false;
-        processScanResult(n);
-        return;
-    }
-
-    //=============================
-    // 定时触发扫描
-    //=============================
-    if (now - lastScanTime >= SCAN_INTERVAL)
-    {
-        startScan();
-        return;
-    }
-
-    //=============================
-    // 正在连接中
+    // 正在连接中（优先处理，不扫描）
     //=============================
     if (connecting)
     {
@@ -111,6 +83,32 @@ void WifiManager::update()
             statusChanged = true;
         }
 
+        return;
+    }
+
+    //=============================
+    // 异步扫描：检查完成状态
+    //=============================
+    if (scanning)
+    {
+        int n = WiFi.scanComplete();
+
+        if (n == -1)
+        {
+            return;
+        }
+
+        scanning = false;
+        processScanResult(n);
+        return;
+    }
+
+    //=============================
+    // 定时触发扫描
+    //=============================
+    if (now - lastScanTime >= SCAN_INTERVAL)
+    {
+        startScan();
         return;
     }
 
