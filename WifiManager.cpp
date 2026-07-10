@@ -238,9 +238,17 @@ void WifiManager::processScanResult(int n)
     for (int i = 0; i < n; i++)
     {
         Serial.print("  ");
+        Serial.print("SSID=");
         Serial.print(WiFi.SSID(i));
-        Serial.print("  ");
-        Serial.println(WiFi.RSSI(i));
+
+        Serial.print(" RSSI=");
+        Serial.print(WiFi.RSSI(i));
+
+        Serial.print(" CH=");
+        Serial.print(WiFi.channel(i));
+
+        Serial.print(" AUTH=");
+        Serial.println(WiFi.encryptionType(i));
     }
 
     cachedNetworks = "";
@@ -272,20 +280,33 @@ void WifiManager::processScanResult(int n)
 bool WifiManager::tryConnect(const char *ssid,
                              const char *password)
 {
-    WiFi.disconnect(false, false);
-    delay(100);
-    WiFi.mode(WIFI_STA);
-    delay(100);
-    WiFi.begin(ssid, password);
 
-    Serial.print("WiFi connect: ");
-    Serial.println(ssid);
+    Serial.println("=== WIFI TEST ===");
+
+
+    WiFi.disconnect(true);
+    delay(1000);
+
+
+    WiFi.mode(WIFI_STA);
+    delay(500);
+
+
+    WiFi.setSleep(false);
+
+
+    Serial.println("WiFi.begin");
+
+
+    WiFi.begin(
+        "Redmi_E490",
+        "22222222"
+    );
+
 
     connecting = true;
     connectStartTime = millis();
 
-    connectStatus = "STATE|CONNECTING";
-    statusChanged = true;
 
     return true;
 }
@@ -306,6 +327,12 @@ bool WifiManager::saveCredentials(const char *ssid,
 
     Serial.print("WiFi saved: ");
     Serial.println(ssid);
+    Serial.print("SAVE PASS=[");
+    Serial.print(password);
+    Serial.println("]");
+
+    Serial.print("SAVE LEN=");
+    Serial.println(strlen(password));
 
     return true;
 }
