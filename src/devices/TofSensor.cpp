@@ -167,7 +167,8 @@ void TofSensor::calibrate()
 void TofSensor::primeFilter()
 {
     uint8_t validCount = 0;
-    while (validCount < 3)
+    unsigned long start = millis();
+    while (validCount < 3 && millis() - start < 5000)
     {
         const float distance = readRaw();
         if (distance > 0.0F)
@@ -178,7 +179,14 @@ void TofSensor::primeFilter()
         }
         delay(30);
     }
-    historyReady = true;
+    if (validCount == 3)
+    {
+        historyReady = true;
+    }
+    else
+    {
+        Serial.println("PrimeFilter timeout, filter not ready");
+    }
 }
 
 float TofSensor::getBaseline() const
