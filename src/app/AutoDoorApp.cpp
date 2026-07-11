@@ -36,7 +36,6 @@ void AutoDoorApp::begin()
                Config::Ble::wifiScanCharacteristicUuid,
                Config::Ble::wifiConfigCharacteristicUuid,
                &wifi_);
-    web_.begin(&door_, &servo_, &wifi_);
 
     tofSensor_.calibrate();
     door_.begin(&tofSensor_, &servo_);
@@ -100,6 +99,8 @@ void AutoDoorApp::handleWiFiConfig()
 void AutoDoorApp::enterRunningState()
 {
     state_ = State::Running;
+    web_.begin(&door_, &servo_, &wifi_);
+
     Serial.print("Web: http://");
     Serial.print(wifi_.getLocalIP());
     Serial.print(" or http://");

@@ -35,7 +35,7 @@ stateDiagram-v2
 ### 注意事项
 
 - Wi-Fi 密码只应写入 NVS，不应出现在日志、API 或 BLE 状态中。
-- 扫描不再自动定期执行，而是由 BLE 连接/读取事件触发。已连接状态下调用 startScan() 会直接返回，不会打断现有连接。
+- 扫描不再自动定期执行，而是由 BLE 连接/读取事件触发。已连接状态也允许在线扫描附近网络，以便通过 BLE 更换 Wi-Fi；扫描不会主动断开当前连接，但射频扫描期间 HTTP 响应可能短暂变慢。
 - 当前连接和扫描恢复流程包含少量阻塞延时，属于现有实现约束。
 
 ---
@@ -63,9 +63,9 @@ stateDiagram-v2
 
 ### 扫描结果
 
-扫描由 BLE 连接/读取事件或连接超时后触发。公开 `startScan()` 只以原子标志登记请求，不得从 BLE 回调直接调用 Wi-Fi 驱动。`update()` 在没有连接和扫描任务时消费请求并调用私有 `beginScan()`，保证扫描启动、结果读取和删除都只发生在 Arduino 主循环任务。已连接时请求直接跳过，不打断现有连接；扫描进行期间的新请求会在本轮结束后处理。
+扫描由 BLE 连接/读取事件或连接超时后触发。公开 `startScan()` 只以原子标志登记请求，不得从 BLE 回调直接调用 Wi-Fi 驱动。`update()` 在没有连接和扫描任务时消费请求并调用私有 `beginScan()`，保证扫描启动、结果读取和删除都只发生在 Arduino 主循环任务。已连接时保留当前连接并直接发起在线扫描；扫描进行期间的新请求会在本轮结束后处理。
 
-`beginScan()` 先 disconnect 并 delay 200ms，然后检查 `scanNetworks(true)` 返回值；只有返回 `WIFI_SCAN_RUNNING` 才设置 scanning、`STATE|SCANNING` 并打印启动成功。结果按 RSSI 从强到弱排序；先完整复制到局部字符串和 SSID vector，调用 `scanDelete()` 后再在互斥锁保护下整体替换公开快照，避免 BLE 读取到半更新数据。缓存每行 `显示索引|SSID|中文信号标签`，行间 CRLF，并以同序填充 scannedSSIDs。标签阈值依次为 -30/-40/-50/-60/-70/-80。
+`beginScan()` 在未连接时先 disconnect 并 delay 200ms；已连接时不执行 disconnect，只打印保留当前连接。然后检查 `scanNetworks(true)` 返回值；只有返回 `WIFI_SCAN_RUNNING` 才设置 scanning、`STATE|SCANNING` 并打印启动成功。`scanComplete()` 返回运行中时不得因为当前仍是 WL_CONNECTED 而中止，因为在线扫描本来就允许保持连接。结果按 RSSI 从强到弱排序；先完整复制到局部字符串和 SSID vector，调用 `scanDelete()` 后再在互斥锁保护下整体替换公开快照，避免 BLE 读取到半更新数据。缓存每行 `显示索引|SSID|中文信号标签`，行间 CRLF，并以同序填充 scannedSSIDs。标签阈值依次为 -30/-40/-50/-60/-70/-80。
 
 结果不大于 0 时保留旧缓存。成功后 `scanDelete()`。
 

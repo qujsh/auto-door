@@ -58,11 +58,13 @@ void WebServerManager::setupRoutes()
 
 void WebServerManager::handleRoot(AsyncWebServerRequest *request)
 {
+    Serial.println("HTTP GET /");
     request->send_P(200, "text/html", INDEX_HTML);
 }
 
 void WebServerManager::handleStatus(AsyncWebServerRequest *request)
 {
+    Serial.println("HTTP GET /api/status");
     String json = buildStatusJson();
     request->send(200, "application/json", json);
 }

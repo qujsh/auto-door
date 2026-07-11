@@ -116,12 +116,6 @@ void WifiManager::update()
 
         if (n == -1)
         {
-            if (WiFi.status() == WL_CONNECTED)
-            {
-                scanning = false;
-                Serial.println("WiFi Scan abort: connected");
-                return;
-            }
             if (millis() - scanStartTime > 10000)
             {
                 scanning = false;
@@ -210,19 +204,21 @@ void WifiManager::startScan()
 
 void WifiManager::beginScan()
 {
-    if (isConnected())
-    {
-        Serial.println("WiFi Scan skip: already connected");
-        return;
-    }
     if (scanning)
     {
         Serial.println("WiFi Scan skip: scan in progress");
         return;
     }
 
-    WiFi.disconnect();
-    delay(200);
+    if (isConnected())
+    {
+        Serial.println("WiFi Scan: keeping current connection");
+    }
+    else
+    {
+        WiFi.disconnect();
+        delay(200);
+    }
 
     scanStartTime = millis();
 
