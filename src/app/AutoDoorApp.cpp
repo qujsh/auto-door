@@ -7,6 +7,12 @@
 void AutoDoorApp::begin()
 {
     Serial.begin(Config::Serial::baudRate);
+    const unsigned long serialWaitStart = millis();
+    while (!Serial &&
+           millis() - serialWaitStart < Config::Serial::readyTimeoutMs)
+    {
+        delay(10);
+    }
     delay(Config::Serial::startupDelayMs);
 
     Serial.println("=================================");

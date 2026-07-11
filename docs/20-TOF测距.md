@@ -32,12 +32,12 @@ flowchart LR
 
 ### 接线
 
-| TOF200C | ESP32 |
+| TOF200C | ESP32-C3 |
 |---|---|
-| VCC | 按模块标称电压供电 |
+| VCC | 3V3 |
 | GND | GND |
-| SDA | GPIO 21 |
-| SCL | GPIO 22 |
+| SDA | GPIO 4 |
+| SCL | GPIO 5 |
 
 默认 I²C 地址为 `0x29`。
 
@@ -79,7 +79,7 @@ float getBaseline() const;
 
 - `Adafruit_VL53L0X tof`
 - `uint8_t address = 0x29`
-- `uint16_t maxDistanceMm = 800`
+- `uint16_t maxDistanceMm = 2000`
 - `float baseline = -1.0F`
 - `float history[3]`：三项均为 `-1.0F`
 - `uint8_t historyIndex = 0`
@@ -109,8 +109,8 @@ float getBaseline() const;
 
 ### 8. 重建验收
 
-- GPIO 21/22、地址 0x29 可初始化 TOF200C。
+- GPIO 4/5、地址 0x29 可初始化 TOF200C。
 - 毫米值正确转换为厘米。
-- 状态 4、零值和大于 800mm 返回 -1。
+- 状态 4、零值和大于 2000mm 返回 -1。
 - 三点滤波和 10 点去极值标定与本文一致。
 - 上层不再包含 `Ultrasonic` 类型或 HC-SR04 引脚。

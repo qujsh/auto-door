@@ -13,9 +13,9 @@ namespace Config
 {
 namespace Pins
 {
-constexpr uint8_t i2cSda = 21;
-constexpr uint8_t i2cScl = 22;
-constexpr uint8_t servo = 5;
+constexpr uint8_t i2cSda = 4;
+constexpr uint8_t i2cScl = 5;
+constexpr uint8_t servo = 6;
 }
 
 namespace Servo
@@ -67,6 +67,7 @@ namespace Serial
 {
 constexpr unsigned long baudRate = 115200;
 constexpr unsigned long startupDelayMs = 500;
+constexpr unsigned long readyTimeoutMs = 3000;
 }
 
 namespace System
