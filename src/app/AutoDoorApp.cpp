@@ -20,10 +20,17 @@ void AutoDoorApp::begin()
                  Config::Servo::openStep,
                  Config::Servo::closeStep);
 
-    ultrasonic_.begin(Config::Pins::ultrasonicTrigger,
-                      Config::Pins::ultrasonicEcho,
-                      Config::Ultrasonic::maxValidDistanceCm);
-    ultrasonic_.calibrate();
+    if (!tofSensor_.begin(Config::Pins::i2cSda,
+                          Config::Pins::i2cScl,
+                          Config::Tof::address,
+                          Config::Tof::maxValidDistanceMm))
+    {
+        while (true)
+        {
+            delay(1000);
+        }
+    }
+    tofSensor_.calibrate();
 
     wifi_.begin();
     ble_.begin(Config::Ble::deviceName,
@@ -31,7 +38,7 @@ void AutoDoorApp::begin()
                Config::Ble::wifiScanCharacteristicUuid,
                Config::Ble::wifiConfigCharacteristicUuid,
                &wifi_);
-    door_.begin(&ultrasonic_, &servo_);
+    door_.begin(&tofSensor_, &servo_);
     web_.begin(&door_, &servo_, &wifi_);
 
     if (wifi_.isConnected())

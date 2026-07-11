@@ -1,7 +1,7 @@
 #include "DoorController.h"
 
 DoorController::DoorController()
-    : ultrasonic(nullptr),
+    : distanceSensor(nullptr),
       servo(nullptr),
       state(DoorState::Closed),
       baseline(0),
@@ -18,13 +18,13 @@ DoorController::DoorController()
 {
 }
 
-void DoorController::begin(Ultrasonic *ultra,
+void DoorController::begin(TofSensor *sensor,
                            ServoControl *servoCtrl)
 {
-    ultrasonic = ultra;
+    distanceSensor = sensor;
     servo = servoCtrl;
 
-    baseline = ultrasonic->getBaseline();
+    baseline = distanceSensor->getBaseline();
 
     state = DoorState::Closed;
 
@@ -53,7 +53,7 @@ void DoorController::update()
 //=====================================================
 void DoorController::updateAutoMode(unsigned long now)
 {
-    float d = ultrasonic->readDistance();
+    float d = distanceSensor->readDistance();
 
     currentDistance = d;
 
@@ -66,7 +66,7 @@ void DoorController::updateAutoMode(unsigned long now)
 
     currentDiff = diff;
 
-    bool detect = (diff >= Config::Ultrasonic::changeThresholdCm);
+    bool detect = (diff >= Config::Tof::changeThresholdCm);
 
     currentDetect = detect;
 
@@ -240,9 +240,9 @@ bool DoorController::isManualMode() const
 //=====================================================
 void DoorController::triggerCalibrate()
 {
-    ultrasonic->calibrate();
+    distanceSensor->calibrate();
 
-    baseline = ultrasonic->getBaseline();
+    baseline = distanceSensor->getBaseline();
 
     state = DoorState::Closed;
 

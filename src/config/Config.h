@@ -13,8 +13,8 @@ namespace Config
 {
 namespace Pins
 {
-constexpr uint8_t ultrasonicTrigger = 2;
-constexpr uint8_t ultrasonicEcho = 1;
+constexpr uint8_t i2cSda = 21;
+constexpr uint8_t i2cScl = 22;
 constexpr uint8_t servo = 5;
 }
 
@@ -27,10 +27,11 @@ constexpr int openStep = 30;
 constexpr int closeStep = 10;
 }
 
-namespace Ultrasonic
+namespace Tof
 {
+constexpr uint8_t address = 0x29;
 constexpr float changeThresholdCm = 2.5F;
-constexpr float maxValidDistanceCm = 80.0F;
+constexpr uint16_t maxValidDistanceMm = 800;
 }
 
 namespace Door

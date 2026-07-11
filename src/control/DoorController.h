@@ -2,7 +2,7 @@
 #define DOOR_CONTROLLER_H
 
 #include <Arduino.h>
-#include "../devices/Ultrasonic.h"
+#include "../devices/TofSensor.h"
 #include "../devices/ServoControl.h"
 #include "../config/Config.h"
 
@@ -14,7 +14,7 @@ public:
     /**
      * 初始化
      */
-    void begin(Ultrasonic *ultra,
+    void begin(TofSensor *sensor,
                ServoControl *servo);
 
     /**
@@ -46,7 +46,7 @@ private:
 
 private:
 
-    Ultrasonic *ultrasonic;
+    TofSensor *distanceSensor;
     ServoControl *servo;
 
     DoorState state;

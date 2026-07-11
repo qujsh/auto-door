@@ -3,7 +3,7 @@
 #include "../network/BleManager.h"
 #include "../control/DoorController.h"
 #include "../devices/ServoControl.h"
-#include "../devices/Ultrasonic.h"
+#include "../devices/TofSensor.h"
 #include "../web/WebServerManager.h"
 #include "../network/WifiManager.h"
 
@@ -24,7 +24,7 @@ private:
     void enterRunningState();
 
     ServoControl servo_;
-    Ultrasonic ultrasonic_;
+    TofSensor tofSensor_;
     BleManager ble_;
     DoorController door_;
     WifiManager wifi_;
