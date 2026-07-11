@@ -1,7 +1,5 @@
 #include "WifiManager.h"
-#include "Config.h"
-
-static const unsigned long SCAN_INTERVAL = 30000;
+#include "../config/Config.h"
 
 void WifiManager::begin()
 {
@@ -71,14 +69,14 @@ void WifiManager::update()
             connectStatus += WiFi.localIP().toString();
             statusChanged = true;
 
-            if (MDNS.begin(MDNS_HOSTNAME))
+            if (MDNS.begin(Config::Network::mdnsHostname))
             {
                 Serial.print("mDNS: http://");
-                Serial.print(MDNS_HOSTNAME);
+                Serial.print(Config::Network::mdnsHostname);
                 Serial.println(".local");
             }
         }
-        else if (now - connectStartTime >= 15000)
+        else if (now - connectStartTime >= Config::Network::connectTimeoutMs)
         {
             Serial.print("WiFi status=");
             Serial.println(WiFi.status());
@@ -129,7 +127,7 @@ void WifiManager::update()
     //=============================
     // 定时触发扫描
     //=============================
-    if (now - lastScanTime >= SCAN_INTERVAL)
+    if (now - lastScanTime >= Config::Network::scanIntervalMs)
     {
         startScan();
         return;
@@ -152,7 +150,7 @@ void WifiManager::update()
         connectStatus = "STATE|DISCONNECTED";
         statusChanged = true;
 
-        if (now - lastRetryTime >= 30000)
+        if (now - lastRetryTime >= Config::Network::reconnectIntervalMs)
         {
             lastRetryTime = now;
             WiFi.reconnect();
@@ -209,7 +207,7 @@ void WifiManager::processScanResult(int n)
 
         if (cachedNetworks.length() == 0)
         {
-            lastScanTime = millis() - SCAN_INTERVAL + 5000;
+            lastScanTime = millis() - Config::Network::scanIntervalMs + 5000;
         }
 
         return;
@@ -281,9 +279,6 @@ bool WifiManager::tryConnect(const char *ssid,
                              const char *password)
 {
 
-    Serial.println("=== WIFI TEST ===");
-
-
     WiFi.disconnect(true);
     delay(1000);
 
@@ -298,10 +293,7 @@ bool WifiManager::tryConnect(const char *ssid,
     Serial.println("WiFi.begin");
 
 
-    WiFi.begin(
-        "Redmi_E490",
-        "22222222"
-    );
+    WiFi.begin(ssid, password);
 
 
     connecting = true;
@@ -327,13 +319,6 @@ bool WifiManager::saveCredentials(const char *ssid,
 
     Serial.print("WiFi saved: ");
     Serial.println(ssid);
-    Serial.print("SAVE PASS=[");
-    Serial.print(password);
-    Serial.println("]");
-
-    Serial.print("SAVE LEN=");
-    Serial.println(strlen(password));
-
     return true;
 }
 

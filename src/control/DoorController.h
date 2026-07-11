@@ -2,9 +2,9 @@
 #define DOOR_CONTROLLER_H
 
 #include <Arduino.h>
-#include "Ultrasonic.h"
-#include "ServoControl.h"
-#include "Config.h"
+#include "../devices/Ultrasonic.h"
+#include "../devices/ServoControl.h"
+#include "../config/Config.h"
 
 class DoorController
 {

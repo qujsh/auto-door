@@ -17,7 +17,7 @@ void WebServerManager::begin(DoorController *doorCtrl,
     servo = servoCtrl;
     wifi = wifiMgr;
 
-    server = new AsyncWebServer(WEB_PORT);
+    server = new AsyncWebServer(Config::Network::webPort);
 
     setupRoutes();
 
@@ -146,9 +146,9 @@ const char *WebServerManager::doorStateToString(DoorState s)
 {
     switch (s)
     {
-        case DoorState::CLOSED:     return "CLOSED";
-        case DoorState::OPEN:       return "OPEN";
-        case DoorState::WAIT_CLOSE: return "WAIT_CLOSE";
+        case DoorState::Closed:         return "CLOSED";
+        case DoorState::Open:           return "OPEN";
+        case DoorState::WaitingToClose: return "WAIT_CLOSE";
         default:                    return "UNKNOWN";
     }
 }

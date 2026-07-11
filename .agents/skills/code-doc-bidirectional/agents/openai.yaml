@@ -1,0 +1,4 @@
+interface:
+  display_name: "代码文档双向工程"
+  short_description: "从代码生成可重建文档，也可从文档生成代码"
+  default_prompt: "使用 $code-doc-bidirectional 为当前项目建立代码与中文模块文档的双向映射。"

@@ -3,7 +3,7 @@
 DoorController::DoorController()
     : ultrasonic(nullptr),
       servo(nullptr),
-      state(DoorState::CLOSED),
+      state(DoorState::Closed),
       baseline(0),
       lastSeenTime(0),
       closeStartTime(0),
@@ -26,7 +26,7 @@ void DoorController::begin(Ultrasonic *ultra,
 
     baseline = ultrasonic->getBaseline();
 
-    state = DoorState::CLOSED;
+    state = DoorState::Closed;
 
     lastSeenTime = 0;
     closeStartTime = 0;
@@ -35,7 +35,7 @@ void DoorController::begin(Ultrasonic *ultra,
     detecting = false;
     detectStartTime = 0;
 
-    servo->setTargetAngle(SERVO_CLOSE_ANGLE);
+    servo->setTargetAngle(Config::Servo::closedAngle);
 }
 
 void DoorController::update()
@@ -66,7 +66,7 @@ void DoorController::updateAutoMode(unsigned long now)
 
     currentDiff = diff;
 
-    bool detect = (diff >= DISTANCE_CHANGE_THRESHOLD);
+    bool detect = (diff >= Config::Ultrasonic::changeThresholdCm);
 
     currentDetect = detect;
 
@@ -81,7 +81,7 @@ void DoorController::updateAutoMode(unsigned long now)
             detectStartTime = now;
         }
 
-        if (now - detectStartTime >= DETECT_DEBOUNCE)
+        if (now - detectStartTime >= Config::Door::detectionDebounceMs)
         {
             lastSeenTime = now;
         }
@@ -91,13 +91,13 @@ void DoorController::updateAutoMode(unsigned long now)
         detecting = false;
     }
 
-    bool isPresent = (now - lastSeenTime) < PRESENCE_TIMEOUT;
+    bool isPresent = (now - lastSeenTime) < Config::Door::presenceTimeoutMs;
 
     currentPresent = isPresent;
 
-    if (DEBUG_DISTANCE)
+    if (Config::Debug::logDistance)
     {
-        if (now - lastPrintTime >= DEBUG_PRINT_INTERVAL)
+        if (now - lastPrintTime >= Config::Debug::printIntervalMs)
         {
             lastPrintTime = now;
 
@@ -115,13 +115,13 @@ void DoorController::updateAutoMode(unsigned long now)
 
             switch (state)
             {
-                case DoorState::CLOSED:
+                case DoorState::Closed:
                     Serial.print("CLOSED");
                     break;
-                case DoorState::OPEN:
+                case DoorState::Open:
                     Serial.print("OPEN");
                     break;
-                case DoorState::WAIT_CLOSE:
+                case DoorState::WaitingToClose:
                     Serial.print("WAIT_CLOSE");
                     break;
             }
@@ -137,36 +137,36 @@ void DoorController::updateAutoMode(unsigned long now)
     //=============================
     switch (state)
     {
-        case DoorState::CLOSED:
+        case DoorState::Closed:
         {
             if (isPresent)
             {
                 setDoorOpen();
-                state = DoorState::OPEN;
+                state = DoorState::Open;
             }
         }
         break;
 
-        case DoorState::OPEN:
+        case DoorState::Open:
         {
             if (!isPresent)
             {
-                state = DoorState::WAIT_CLOSE;
+                state = DoorState::WaitingToClose;
                 closeStartTime = now;
             }
         }
         break;
 
-        case DoorState::WAIT_CLOSE:
+        case DoorState::WaitingToClose:
         {
             if (isPresent)
             {
-                state = DoorState::OPEN;
+                state = DoorState::Open;
             }
-            else if (now - closeStartTime >= CLOSE_DELAY)
+            else if (now - closeStartTime >= Config::Door::closeDelayMs)
             {
                 setDoorClose();
-                state = DoorState::CLOSED;
+                state = DoorState::Closed;
             }
         }
         break;
@@ -178,7 +178,7 @@ void DoorController::updateAutoMode(unsigned long now)
 //=====================================================
 void DoorController::setDoorOpen()
 {
-    servo->setTargetAngle(SERVO_OPEN_ANGLE);
+    servo->setTargetAngle(Config::Servo::openAngle);
 }
 
 //=====================================================
@@ -186,7 +186,7 @@ void DoorController::setDoorOpen()
 //=====================================================
 void DoorController::setDoorClose()
 {
-    servo->setTargetAngle(SERVO_CLOSE_ANGLE);
+    servo->setTargetAngle(Config::Servo::closedAngle);
 }
 
 //=====================================================
@@ -244,7 +244,7 @@ void DoorController::triggerCalibrate()
 
     baseline = ultrasonic->getBaseline();
 
-    state = DoorState::CLOSED;
+    state = DoorState::Closed;
 
     detecting = false;
 }

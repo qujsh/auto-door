@@ -1,0 +1,103 @@
+#include "AutoDoorApp.h"
+
+#include <Arduino.h>
+#include <ESP.h>
+
+#include "../config/Config.h"
+
+void AutoDoorApp::begin()
+{
+    Serial.begin(Config::Serial::baudRate);
+    delay(Config::Serial::startupDelayMs);
+
+    Serial.println("=================================");
+    Serial.println("AutoDoorBLE starting...");
+    Serial.println("=================================");
+
+    servo_.begin(Config::Pins::servo,
+                 Config::Servo::closedAngle,
+                 Config::Servo::updateIntervalMs,
+                 Config::Servo::openStep,
+                 Config::Servo::closeStep);
+
+    ultrasonic_.begin(Config::Pins::ultrasonicTrigger,
+                      Config::Pins::ultrasonicEcho,
+                      Config::Ultrasonic::maxValidDistanceCm);
+    ultrasonic_.calibrate();
+
+    wifi_.begin();
+    ble_.begin(Config::Ble::deviceName,
+               Config::Ble::serviceUuid,
+               Config::Ble::wifiScanCharacteristicUuid,
+               Config::Ble::wifiConfigCharacteristicUuid,
+               &wifi_);
+    door_.begin(&ultrasonic_, &servo_);
+    web_.begin(&door_, &servo_, &wifi_);
+
+    if (wifi_.isConnected())
+    {
+        enterRunningState();
+    }
+    else
+    {
+        Serial.println("No WiFi connection. Configure it over BLE.");
+    }
+
+    Serial.println("System ready");
+}
+
+void AutoDoorApp::update()
+{
+    wifi_.update();
+    servo_.update();
+    ble_.update();
+    handleWiFiConfig();
+
+    if (state_ == State::Configuring && wifi_.isConnected())
+    {
+        enterRunningState();
+    }
+
+    if (state_ == State::Running)
+    {
+        door_.update();
+    }
+}
+
+void AutoDoorApp::handleWiFiConfig()
+{
+    int networkIndex = -1;
+    String password;
+    if (!ble_.hasWiFiConfig(networkIndex, password))
+    {
+        return;
+    }
+
+    const String ssid = wifi_.getSSIDByIndex(networkIndex);
+    if (ssid.isEmpty())
+    {
+        Serial.println("BLE WiFi configuration contains an invalid network index");
+        return;
+    }
+
+    wifi_.saveCredentials(ssid.c_str(), password.c_str());
+    if (state_ == State::Configuring)
+    {
+        wifi_.tryConnect(ssid.c_str(), password.c_str());
+        return;
+    }
+
+    Serial.println("WiFi configuration updated; restarting...");
+    delay(Config::System::restartDelayMs);
+    ESP.restart();
+}
+
+void AutoDoorApp::enterRunningState()
+{
+    state_ = State::Running;
+    Serial.print("Web: http://");
+    Serial.print(wifi_.getLocalIP());
+    Serial.print(" or http://");
+    Serial.print(Config::Network::mdnsHostname);
+    Serial.println(".local");
+}

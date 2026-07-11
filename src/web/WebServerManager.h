@@ -2,9 +2,9 @@
 #define WEB_SERVER_MANAGER_H
 
 #include <ESPAsyncWebServer.h>
-#include "DoorController.h"
-#include "ServoControl.h"
-#include "WifiManager.h"
+#include "../control/DoorController.h"
+#include "../devices/ServoControl.h"
+#include "../network/WifiManager.h"
 
 class WebServerManager
 {
