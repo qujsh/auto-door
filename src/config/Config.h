@@ -31,7 +31,7 @@ namespace Tof
 {
 constexpr uint8_t address = 0x29;
 constexpr float changeThresholdCm = 2.5F;
-constexpr uint16_t maxValidDistanceMm = 800;
+constexpr uint16_t maxValidDistanceMm = 2000;
 }
 
 namespace Door

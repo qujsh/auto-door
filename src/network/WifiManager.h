@@ -47,6 +47,7 @@ private:
 
     unsigned long connectStartTime;
     unsigned long lastRetryTime;
+    unsigned long scanStartTime;
 
     String cachedNetworks;
 

@@ -17,6 +17,7 @@ void WifiManager::begin()
     scanning = false;
     connectStartTime = 0;
     lastRetryTime = 0;
+    scanStartTime = 0;
 
     cachedNetworks = "";
     scannedSSIDs.clear();
@@ -50,6 +51,21 @@ void WifiManager::begin()
 void WifiManager::update()
 {
     unsigned long now = millis();
+
+    // DEBUG: confirm update() is called
+    static unsigned long lastDebugPrint = 0;
+    if (now - lastDebugPrint > 3000)
+    {
+        lastDebugPrint = now;
+        Serial.print("WifiMgr update: connected=");
+        Serial.print(connected);
+        Serial.print(" connecting=");
+        Serial.print(connecting);
+        Serial.print(" scanning=");
+        Serial.print(scanning);
+        Serial.print(" status=");
+        Serial.println(WiFi.status());
+    }
 
     //=============================
     // 正在连接中（优先处理，不扫描）
@@ -109,6 +125,18 @@ void WifiManager::update()
 
         if (n == -1)
         {
+            if (WiFi.status() == WL_CONNECTED)
+            {
+                scanning = false;
+                Serial.println("WiFi Scan abort: connected");
+                return;
+            }
+            if (millis() - scanStartTime > 10000)
+            {
+                scanning = false;
+                Serial.println("WiFi Scan abort: timeout");
+                return;
+            }
             return;
         }
 
@@ -130,6 +158,24 @@ void WifiManager::update()
     //=============================
     if (!connected)
     {
+        if (WiFi.status() == WL_CONNECTED)
+        {
+            connected = true;
+
+            Serial.print("WiFi Connected, IP: ");
+            Serial.println(WiFi.localIP());
+
+            connectStatus = "STATE|CONNECTED|";
+            connectStatus += WiFi.localIP().toString();
+            statusChanged = true;
+
+            if (MDNS.begin(Config::Network::mdnsHostname))
+            {
+                Serial.print("mDNS: http://");
+                Serial.print(Config::Network::mdnsHostname);
+                Serial.println(".local");
+            }
+        }
         return;
     }
 
@@ -155,13 +201,22 @@ void WifiManager::update()
 //=====================================================
 void WifiManager::startScan()
 {
-    if (isConnected()) return;
-    if (scanning) return;
+    if (isConnected())
+    {
+        Serial.println("WiFi Scan skip: already connected");
+        return;
+    }
+    if (scanning)
+    {
+        Serial.println("WiFi Scan skip: scan in progress");
+        return;
+    }
 
     WiFi.disconnect();
     delay(200);
 
     scanning = true;
+    scanStartTime = millis();
 
     Serial.print("WiFi status=");
     Serial.println(WiFi.status());
