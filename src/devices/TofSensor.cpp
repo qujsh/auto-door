@@ -112,7 +112,8 @@ void TofSensor::calibrate()
     uint8_t count = 0;
 
     Serial.println("Calibrate TOF200C...");
-    while (count < sampleCount)
+    unsigned long start = millis();
+    while (count < sampleCount && millis() - start < 5000)
     {
         const float distance = readRaw();
         if (distance > 0.0F)
@@ -127,19 +128,39 @@ void TofSensor::calibrate()
         delay(50);
     }
 
-    float minValue = values[0];
-    float maxValue = values[0];
-    float sum = 0.0F;
-    for (uint8_t index = 0; index < sampleCount; index++)
+    if (count >= 3)
     {
-        minValue = min(minValue, values[index]);
-        maxValue = max(maxValue, values[index]);
-        sum += values[index];
+        float minValue = values[0];
+        float maxValue = values[0];
+        float sum = 0.0F;
+        for (uint8_t index = 0; index < count; index++)
+        {
+            minValue = min(minValue, values[index]);
+            maxValue = max(maxValue, values[index]);
+            sum += values[index];
+        }
+        baseline = (sum - minValue - maxValue) / (count - 2);
+    }
+    else if (count == 2)
+    {
+        baseline = (values[0] + values[1]) / 2.0F;
+    }
+    else if (count == 1)
+    {
+        baseline = values[0];
+    }
+    else
+    {
+        baseline = maxDistanceMm / 10.0F;
     }
 
-    baseline = (sum - minValue - maxValue) / (sampleCount - 2);
+    Serial.print("Calibrate ");
+    Serial.println(count < sampleCount ? "timeout" : "done");
     Serial.print("Baseline = ");
-    Serial.println(baseline, 2);
+    Serial.print(baseline, 2);
+    Serial.print(" (samples=");
+    Serial.print(count);
+    Serial.println(")");
     primeFilter();
 }
 

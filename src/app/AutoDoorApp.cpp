@@ -29,7 +29,6 @@ void AutoDoorApp::begin()
             delay(1000);
         }
     }
-    tofSensor_.calibrate();
 
     wifi_.begin();
     ble_.begin(Config::Ble::deviceName,
@@ -37,8 +36,10 @@ void AutoDoorApp::begin()
                Config::Ble::wifiScanCharacteristicUuid,
                Config::Ble::wifiConfigCharacteristicUuid,
                &wifi_);
-    door_.begin(&tofSensor_, &servo_);
     web_.begin(&door_, &servo_, &wifi_);
+
+    tofSensor_.calibrate();
+    door_.begin(&tofSensor_, &servo_);
 
     if (wifi_.isConnected())
     {
