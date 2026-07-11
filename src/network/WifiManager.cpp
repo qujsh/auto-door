@@ -3,6 +3,11 @@
 
 void WifiManager::begin()
 {
+    if (!scanSnapshotMutex)
+    {
+        scanSnapshotMutex = xSemaphoreCreateMutex();
+    }
+
     WiFi.mode(WIFI_STA);
 
     WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
@@ -23,6 +28,7 @@ void WifiManager::begin()
     scannedSSIDs.clear();
     connectStatus = "";
     statusChanged = false;
+    scanRequested.store(false);
 
     //=============================
     // 读 NVS → 尝试连接
@@ -44,28 +50,13 @@ void WifiManager::begin()
     }
     else
     {
-        startScan();
+        Serial.println("WiFi: no saved credentials");
     }
 }
 
 void WifiManager::update()
 {
     unsigned long now = millis();
-
-    // DEBUG: confirm update() is called
-    static unsigned long lastDebugPrint = 0;
-    if (now - lastDebugPrint > 3000)
-    {
-        lastDebugPrint = now;
-        Serial.print("WifiMgr update: connected=");
-        Serial.print(connected);
-        Serial.print(" connecting=");
-        Serial.print(connecting);
-        Serial.print(" scanning=");
-        Serial.print(scanning);
-        Serial.print(" status=");
-        Serial.println(WiFi.status());
-    }
 
     //=============================
     // 正在连接中（优先处理，不扫描）
@@ -134,6 +125,7 @@ void WifiManager::update()
             if (millis() - scanStartTime > 10000)
             {
                 scanning = false;
+                WiFi.scanDelete();
                 Serial.println("WiFi Scan abort: timeout");
                 return;
             }
@@ -151,6 +143,18 @@ void WifiManager::update()
 
         processScanResult(n);
         return;
+    }
+
+    // BLE callbacks only enqueue requests. All Wi-Fi driver calls stay here
+    // on the Arduino loop task so a new scan cannot overwrite results while
+    // processScanResult() is still copying them.
+    if (scanRequested.exchange(false))
+    {
+        beginScan();
+        if (scanning)
+        {
+            return;
+        }
     }
 
     //=============================
@@ -201,6 +205,11 @@ void WifiManager::update()
 //=====================================================
 void WifiManager::startScan()
 {
+    scanRequested.store(true);
+}
+
+void WifiManager::beginScan()
+{
     if (isConnected())
     {
         Serial.println("WiFi Scan skip: already connected");
@@ -215,18 +224,24 @@ void WifiManager::startScan()
     WiFi.disconnect();
     delay(200);
 
-    scanning = true;
     scanStartTime = millis();
 
     Serial.print("WiFi status=");
     Serial.println(WiFi.status());
 
-    connectStatus = "STATE|SCANNING";
-    statusChanged = true;
+    int result = WiFi.scanNetworks(true);
+    if (result == WIFI_SCAN_RUNNING)
+    {
+        scanning = true;
+        connectStatus = "STATE|SCANNING";
+        statusChanged = true;
+        Serial.println("WiFi Scan started");
+        return;
+    }
 
-    WiFi.scanNetworks(true);
-
-    Serial.println("WiFi Scan started");
+    scanning = false;
+    Serial.print("WiFi Scan: failed to start, result=");
+    Serial.println(result);
 }
 
 //=====================================================
@@ -291,25 +306,37 @@ void WifiManager::processScanResult(int n)
         Serial.println(WiFi.encryptionType(i));
     }
 
-    cachedNetworks = "";
-    scannedSSIDs.clear();
+    String newCachedNetworks;
+    std::vector<String> newScannedSSIDs;
+    newScannedSSIDs.reserve(n);
 
     for (int i = 0; i < n; i++)
     {
-        if (i > 0) cachedNetworks += "\r\n";
+        if (i > 0) newCachedNetworks += "\r\n";
 
         int idx = indices[i];
 
-        cachedNetworks += String(i);
-        cachedNetworks += "|";
-        cachedNetworks += WiFi.SSID(idx);
-        cachedNetworks += "|";
-        cachedNetworks += rssiToLabel(WiFi.RSSI(idx));
+        newCachedNetworks += String(i);
+        newCachedNetworks += "|";
+        newCachedNetworks += WiFi.SSID(idx);
+        newCachedNetworks += "|";
+        newCachedNetworks += rssiToLabel(WiFi.RSSI(idx));
 
-        scannedSSIDs.push_back(WiFi.SSID(idx));
+        newScannedSSIDs.push_back(WiFi.SSID(idx));
     }
 
     WiFi.scanDelete();
+
+    if (scanSnapshotMutex)
+    {
+        xSemaphoreTake(scanSnapshotMutex, portMAX_DELAY);
+    }
+    cachedNetworks = newCachedNetworks;
+    scannedSSIDs.swap(newScannedSSIDs);
+    if (scanSnapshotMutex)
+    {
+        xSemaphoreGive(scanSnapshotMutex);
+    }
 
     Serial.println("WiFi Scan done");
 }
@@ -366,12 +393,20 @@ bool WifiManager::saveCredentials(const char *ssid,
 //=====================================================
 String WifiManager::getSSIDByIndex(int index)
 {
+    String ssid;
+    if (scanSnapshotMutex)
+    {
+        xSemaphoreTake(scanSnapshotMutex, portMAX_DELAY);
+    }
     if (index >= 0 && index < (int)scannedSSIDs.size())
     {
-        return scannedSSIDs[index];
+        ssid = scannedSSIDs[index];
     }
-
-    return "";
+    if (scanSnapshotMutex)
+    {
+        xSemaphoreGive(scanSnapshotMutex);
+    }
+    return ssid;
 }
 
 bool WifiManager::isConnected() const
@@ -396,7 +431,25 @@ int WifiManager::getRSSI() const
 
 String WifiManager::getCachedNetworks()
 {
-    return cachedNetworks;
+    String networks;
+    std::vector<String> ignored;
+    getScanSnapshot(networks, ignored);
+    return networks;
+}
+
+void WifiManager::getScanSnapshot(String &networks,
+                                  std::vector<String> &ssids)
+{
+    if (scanSnapshotMutex)
+    {
+        xSemaphoreTake(scanSnapshotMutex, portMAX_DELAY);
+    }
+    networks = cachedNetworks;
+    ssids = scannedSSIDs;
+    if (scanSnapshotMutex)
+    {
+        xSemaphoreGive(scanSnapshotMutex);
+    }
 }
 
 String WifiManager::getConnectStatus()

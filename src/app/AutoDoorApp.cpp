@@ -74,13 +74,13 @@ void AutoDoorApp::update()
 void AutoDoorApp::handleWiFiConfig()
 {
     int networkIndex = -1;
+    String ssid;
     String password;
-    if (!ble_.hasWiFiConfig(networkIndex, password))
+    if (!ble_.hasWiFiConfig(networkIndex, ssid, password))
     {
         return;
     }
 
-    const String ssid = wifi_.getSSIDByIndex(networkIndex);
     if (ssid.isEmpty())
     {
         Serial.println("BLE WiFi configuration contains an invalid network index");

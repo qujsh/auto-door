@@ -8,8 +8,7 @@ BleManager::BleManager()
       wifi(nullptr),
       connected(false),
       bleMode(false),
-      configIndex(-1),
-      newWiFiConfig(false)
+      configIndex(-1)
 {
 }
 
@@ -58,7 +57,7 @@ void BleManager::begin(const char *deviceName,
 
     NimBLEDevice::startAdvertising();
 
-    newWiFiConfig = false;
+    newWiFiConfig.store(false);
 
     Serial.println("BLE Advertising Started");
 }
@@ -143,7 +142,8 @@ void BleManager::onRead(NimBLECharacteristic *characteristic,
 
     if (characteristic == wifiScanChar && wifi)
     {
-        String list = wifi->getCachedNetworks();
+        String list;
+        wifi->getScanSnapshot(list, selectionSSIDs);
 
         if (list.length() == 0)
         {
@@ -208,24 +208,30 @@ void BleManager::parseWiFiConfig(const char *data)
     configPassword = raw.substring(plusPos + 1);
     configPassword.trim();
 
-    newWiFiConfig = true;
+    Serial.printf("BLE Config: index=%d pass=%s\n", configIndex, configPassword.c_str());
 
-    Serial.print("BLE Config: index=");
-    Serial.print(configIndex);
-    Serial.print(" pass=");
-    Serial.println(configPassword);
-}
-
-bool BleManager::hasWiFiConfig(int &index, String &password)
-{
-    bool temp = newWiFiConfig;
-
-    if (temp)
+    if (configIndex < 0 || configIndex >= (int)selectionSSIDs.size())
     {
-        index = configIndex;
-        password = configPassword;
-        newWiFiConfig = false;
+        configSSID = "";
+        Serial.println("BLE: network index is not in the last read snapshot");
+    }
+    else
+    {
+        configSSID = selectionSSIDs[configIndex];
     }
 
-    return temp;
+    newWiFiConfig.store(true, std::memory_order_release);
+}
+
+bool BleManager::hasWiFiConfig(int &index, String &ssid, String &password)
+{
+    if (newWiFiConfig.exchange(false, std::memory_order_acquire))
+    {
+        index = configIndex;
+        ssid = configSSID;
+        password = configPassword;
+        return true;
+    }
+
+    return false;
 }

@@ -4,7 +4,9 @@
 #include <WiFi.h>
 #include <ESPmDNS.h>
 #include <Preferences.h>
+#include <atomic>
 #include <vector>
+#include <freertos/semphr.h>
 
 class WifiManager
 {
@@ -29,6 +31,9 @@ public:
 
     String getCachedNetworks();
 
+    void getScanSnapshot(String &networks,
+                         std::vector<String> &ssids);
+
     String getSSIDByIndex(int index);
 
     String getConnectStatus();
@@ -38,6 +43,8 @@ public:
     void startScan();
 
 private:
+
+    void beginScan();
 
     void processScanResult(int n);
 
@@ -55,6 +62,9 @@ private:
 
     String connectStatus;
     bool statusChanged;
+
+    std::atomic<bool> scanRequested{false};
+    SemaphoreHandle_t scanSnapshotMutex = nullptr;
 };
 
 #endif

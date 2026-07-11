@@ -3,6 +3,8 @@
 
 #include <Arduino.h>
 #include <NimBLEDevice.h>
+#include <atomic>
+#include <vector>
 #include "WifiManager.h"
 
 class BleManager : public NimBLEServerCallbacks,
@@ -26,7 +28,7 @@ public:
 
     void stop();
 
-    bool hasWiFiConfig(int &index, String &password);
+    bool hasWiFiConfig(int &index, String &ssid, String &password);
 
 private:
 
@@ -58,8 +60,10 @@ private:
     volatile bool bleMode;
 
     int configIndex;
+    String configSSID;
     String configPassword;
-    volatile bool newWiFiConfig;
+    std::atomic<bool> newWiFiConfig{false};
+    std::vector<String> selectionSSIDs;
 };
 
 #endif

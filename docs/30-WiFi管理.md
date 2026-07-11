@@ -46,9 +46,9 @@ stateDiagram-v2
 
 ### 接口和状态
 
-头文件包含 WiFi、ESPmDNS、Preferences、vector。公开：`begin/update`；连接、IP、RSSI、连接中查询；`tryConnect`、`saveCredentials`；缓存网络、索引 SSID、连接状态、一次性状态变化读取和 `startScan()`。私有 `processScanResult(int)`。
+头文件包含 WiFi、ESPmDNS、Preferences、atomic、vector 和 FreeRTOS semaphore。公开：`begin/update`；连接、IP、RSSI、连接中查询；`tryConnect`、`saveCredentials`；缓存网络、原子扫描快照、索引 SSID、连接状态、一次性状态变化读取和 `startScan()`。私有 `beginScan()` 与 `processScanResult(int)`。
 
-成员依次保存 connected/connecting/scanning，连接和重试时间，缓存字符串、`vector<String> scannedSSIDs`、状态字符串和 statusChanged。`begin()` 显式把这些值初始化为 false、0 或空。
+成员依次保存 connected/connecting/scanning，连接和重试时间，缓存字符串、`vector<String> scannedSSIDs`、状态字符串和 statusChanged，最后是原子 scanRequested 与扫描快照互斥锁。`begin()` 创建互斥锁，并显式把运行状态初始化为 false、0 或空。
 
 ### 启动与 NVS
 
@@ -63,7 +63,9 @@ stateDiagram-v2
 
 ### 扫描结果
 
-扫描由 BLE 连接/读取事件或连接超时后自动触发。startScan() 为公开接口，内部先检查 isConnected()（已连接时直接返回，防止打断现有连接），再检查 scanning（已有扫描进行中则返回）。启动扫描前 disconnect 并 delay 200ms，设置 scanning 和 `STATE|SCANNING`，调用 `scanNetworks(true)`。结果按 RSSI 从强到弱排序；缓存每行 `显示索引|SSID|中文信号标签`，行间 CRLF，并以同序填充 scannedSSIDs。标签阈值依次为 -30/-40/-50/-60/-70/-80。
+扫描由 BLE 连接/读取事件或连接超时后触发。公开 `startScan()` 只以原子标志登记请求，不得从 BLE 回调直接调用 Wi-Fi 驱动。`update()` 在没有连接和扫描任务时消费请求并调用私有 `beginScan()`，保证扫描启动、结果读取和删除都只发生在 Arduino 主循环任务。已连接时请求直接跳过，不打断现有连接；扫描进行期间的新请求会在本轮结束后处理。
+
+`beginScan()` 先 disconnect 并 delay 200ms，然后检查 `scanNetworks(true)` 返回值；只有返回 `WIFI_SCAN_RUNNING` 才设置 scanning、`STATE|SCANNING` 并打印启动成功。结果按 RSSI 从强到弱排序；先完整复制到局部字符串和 SSID vector，调用 `scanDelete()` 后再在互斥锁保护下整体替换公开快照，避免 BLE 读取到半更新数据。缓存每行 `显示索引|SSID|中文信号标签`，行间 CRLF，并以同序填充 scannedSSIDs。标签阈值依次为 -30/-40/-50/-60/-70/-80。
 
 结果不大于 0 时保留旧缓存。成功后 `scanDelete()`。
 
@@ -75,4 +77,5 @@ stateDiagram-v2
 
 - 当前代码包含多处阻塞 delay，文档按真实实现记录。
 - 网络缓存索引必须与排序后的 SSID vector 一致。
+- `getScanSnapshot()` 必须在同一把互斥锁内复制列表文本与 SSID vector，使一次 BLE Read 得到一致的索引快照。
 - 密码只存 NVS，不应在此模块输出。
