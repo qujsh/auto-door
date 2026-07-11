@@ -35,8 +35,9 @@ public:
 
     bool hasStatusChanged();
 
-private:
     void startScan();
+
+private:
 
     void processScanResult(int n);
 
@@ -48,7 +49,6 @@ private:
     unsigned long lastRetryTime;
 
     String cachedNetworks;
-    unsigned long lastScanTime;
 
     std::vector<String> scannedSSIDs;
 

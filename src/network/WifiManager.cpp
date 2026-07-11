@@ -20,7 +20,6 @@ void WifiManager::begin()
 
     cachedNetworks = "";
     scannedSSIDs.clear();
-    lastScanTime = 0;
     connectStatus = "";
     statusChanged = false;
 
@@ -94,6 +93,8 @@ void WifiManager::update()
 
             connectStatus = "STATE|FAILED|TIMEOUT";
             statusChanged = true;
+
+            startScan();
         }
 
         return;
@@ -121,15 +122,6 @@ void WifiManager::update()
         }
 
         processScanResult(n);
-        return;
-    }
-
-    //=============================
-    // 定时触发扫描
-    //=============================
-    if (now - lastScanTime >= Config::Network::scanIntervalMs)
-    {
-        startScan();
         return;
     }
 
@@ -163,12 +155,12 @@ void WifiManager::update()
 //=====================================================
 void WifiManager::startScan()
 {
+    if (isConnected()) return;
     if (scanning) return;
 
     WiFi.disconnect();
     delay(200);
 
-    lastScanTime = millis();
     scanning = true;
 
     Serial.print("WiFi status=");
@@ -204,11 +196,6 @@ void WifiManager::processScanResult(int n)
     if (n <= 0)
     {
         Serial.println("WiFi Scan: no networks");
-
-        if (cachedNetworks.length() == 0)
-        {
-            lastScanTime = millis() - Config::Network::scanIntervalMs + 5000;
-        }
 
         return;
     }
@@ -279,22 +266,19 @@ bool WifiManager::tryConnect(const char *ssid,
                              const char *password)
 {
 
+    connected = false;
+
     WiFi.disconnect(true);
     delay(1000);
-
 
     WiFi.mode(WIFI_STA);
     delay(500);
 
-
     WiFi.setSleep(false);
-
 
     Serial.println("WiFi.begin");
 
-
     WiFi.begin(ssid, password);
-
 
     connecting = true;
     connectStartTime = millis();

@@ -53,7 +53,6 @@ namespace Network
 {
 constexpr char mdnsHostname[] = "autodoor";
 constexpr uint16_t webPort = 80;
-constexpr unsigned long scanIntervalMs = 30000;
 constexpr unsigned long connectTimeoutMs = 15000;
 constexpr unsigned long reconnectIntervalMs = 30000;
 }

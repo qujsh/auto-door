@@ -1,7 +1,6 @@
 #include "AutoDoorApp.h"
 
 #include <Arduino.h>
-#include <ESP.h>
 
 #include "../config/Config.h"
 
@@ -94,9 +93,7 @@ void AutoDoorApp::handleWiFiConfig()
         return;
     }
 
-    Serial.println("WiFi configuration updated; restarting...");
-    delay(Config::System::restartDelayMs);
-    ESP.restart();
+    wifi_.tryConnect(ssid.c_str(), password.c_str());
 }
 
 void AutoDoorApp::enterRunningState()

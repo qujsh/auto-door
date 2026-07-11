@@ -109,6 +109,11 @@ void BleManager::onConnect(NimBLEServer *server,
     connected = true;
     bleMode = true;
 
+    if (wifi)
+    {
+        wifi->startScan();
+    }
+
     Serial.println("BLE Connected");
 }
 
@@ -149,6 +154,8 @@ void BleManager::onRead(NimBLECharacteristic *characteristic,
             String header = "\r\n输入格式: 索引+密码\r\n";
             characteristic->setValue((header + list).c_str());
         }
+
+        wifi->startScan();
     }
 }
 
