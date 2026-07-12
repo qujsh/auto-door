@@ -68,14 +68,22 @@ float TofSensor::readRaw()
     VL53L0X_RangingMeasurementData_t measurement;
     tof.rangingTest(&measurement, false);
 
-    if (measurement.RangeStatus == 4 || measurement.RangeMilliMeter == 0)
+    // VL53L0X commonly reports status 4 when no target is inside the
+    // measurable range. For the door state machine this means the monitored
+    // area is clear, so represent it as the configured maximum distance.
+    if (measurement.RangeStatus == 4)
+    {
+        return maxDistanceMm / 10.0F;
+    }
+
+    if (measurement.RangeMilliMeter == 0)
     {
         return -1.0F;
     }
 
     if (measurement.RangeMilliMeter > maxDistanceMm)
     {
-        return -1.0F;
+        return maxDistanceMm / 10.0F;
     }
 
     return measurement.RangeMilliMeter / 10.0F;
