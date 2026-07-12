@@ -1,4 +1,5 @@
 #include "BleManager.h"
+#include "../config/Config.h"
 
 BleManager::BleManager()
     : server(nullptr),
@@ -59,7 +60,7 @@ void BleManager::begin(const char *deviceName,
 
     newWiFiConfig.store(false);
 
-    Serial.println("BLE Advertising Started");
+    if (Config::Debug::logBle) Serial.println("BLE Advertising Started");
 }
 
 void BleManager::update()
@@ -76,8 +77,11 @@ void BleManager::update()
             wifiConfigChar->setValue(status.c_str());
             wifiConfigChar->notify();
 
-            Serial.print("BLE Notify: ");
-            Serial.println(status);
+            if (Config::Debug::logBle)
+            {
+                Serial.print("BLE Notify: ");
+                Serial.println(status);
+            }
         }
     }
 }
@@ -86,7 +90,7 @@ void BleManager::stop()
 {
     NimBLEDevice::stopAdvertising();
 
-    Serial.println("BLE Stopped");
+    if (Config::Debug::logBle) Serial.println("BLE Stopped");
 }
 
 bool BleManager::isConnected() const
@@ -113,7 +117,7 @@ void BleManager::onConnect(NimBLEServer *server,
         wifi->startScan();
     }
 
-    Serial.println("BLE Connected");
+    if (Config::Debug::logBle) Serial.println("BLE Connected");
 }
 
 //=====================================================
@@ -126,8 +130,11 @@ void BleManager::onDisconnect(NimBLEServer *server,
     connected = false;
     bleMode = false;
 
-    Serial.print("BLE Disconnected, reason=");
-    Serial.println(reason);
+    if (Config::Debug::logBle)
+    {
+        Serial.print("BLE Disconnected, reason=");
+        Serial.println(reason);
+    }
 
     NimBLEDevice::startAdvertising();
 }
@@ -138,7 +145,7 @@ void BleManager::onDisconnect(NimBLEServer *server,
 void BleManager::onRead(NimBLECharacteristic *characteristic,
                          NimBLEConnInfo &connInfo)
 {
-    Serial.println("BLE Read");
+    if (Config::Debug::logBle) Serial.println("BLE Read");
 
     if (characteristic == wifiScanChar && wifi)
     {
@@ -172,14 +179,12 @@ void BleManager::onWrite(NimBLECharacteristic *characteristic,
         return;
     }
 
-    Serial.print("BLE RX: ");
-
-    for (char c : value)
+    if (Config::Debug::logBlePayload)
     {
-        Serial.print(c);
+        Serial.print("BLE RX: ");
+        for (char c : value) Serial.print(c);
+        Serial.println();
     }
-
-    Serial.println();
 
     if (characteristic == wifiConfigChar)
     {
@@ -199,7 +204,8 @@ void BleManager::parseWiFiConfig(const char *data)
 
     if (plusPos < 0)
     {
-        Serial.println("BLE: invalid format, use index+password");
+        if (Config::Debug::logErrors)
+            Serial.println("BLE: invalid format, use index+password");
         return;
     }
 
@@ -208,12 +214,14 @@ void BleManager::parseWiFiConfig(const char *data)
     configPassword = raw.substring(plusPos + 1);
     configPassword.trim();
 
-    Serial.printf("BLE Config: index=%d pass=%s\n", configIndex, configPassword.c_str());
+    if (Config::Debug::logBlePayload)
+        Serial.printf("BLE Config: index=%d pass=%s\n", configIndex, configPassword.c_str());
 
     if (configIndex < 0 || configIndex >= (int)selectionSSIDs.size())
     {
         configSSID = "";
-        Serial.println("BLE: network index is not in the last read snapshot");
+        if (Config::Debug::logErrors)
+            Serial.println("BLE: network index is not in the last read snapshot");
     }
     else
     {

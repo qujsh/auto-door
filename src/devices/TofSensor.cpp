@@ -1,4 +1,5 @@
 #include "TofSensor.h"
+#include "../config/Config.h"
 
 TofSensor::TofSensor()
     : address(0x29),
@@ -26,12 +27,15 @@ bool TofSensor::begin(uint8_t sdaPin,
 
     if (!initialized)
     {
-        Serial.println("TOF200C initialization failed!");
-        Serial.println("Please check wiring and I2C address.");
+        if (Config::Debug::logErrors)
+        {
+            Serial.println("TOF200C initialization failed!");
+            Serial.println("Please check wiring and I2C address.");
+        }
         return false;
     }
 
-    Serial.println("TOF200C initialized successfully");
+    if (Config::Debug::logTof) Serial.println("TOF200C initialized successfully");
     return true;
 }
 
@@ -119,7 +123,7 @@ void TofSensor::calibrate()
     float values[sampleCount];
     uint8_t count = 0;
 
-    Serial.println("Calibrate TOF200C...");
+    if (Config::Debug::logTof) Serial.println("Calibrate TOF200C...");
     unsigned long start = millis();
     while (count < sampleCount && millis() - start < 5000)
     {
@@ -127,10 +131,13 @@ void TofSensor::calibrate()
         if (distance > 0.0F)
         {
             values[count] = distance;
-            Serial.print("Sample ");
-            Serial.print(count + 1);
-            Serial.print(" : ");
-            Serial.println(distance, 2);
+            if (Config::Debug::logTofSamples)
+            {
+                Serial.print("Sample ");
+                Serial.print(count + 1);
+                Serial.print(" : ");
+                Serial.println(distance, 2);
+            }
             count++;
         }
         delay(50);
@@ -162,13 +169,16 @@ void TofSensor::calibrate()
         baseline = maxDistanceMm / 10.0F;
     }
 
-    Serial.print("Calibrate ");
-    Serial.println(count < sampleCount ? "timeout" : "done");
-    Serial.print("Baseline = ");
-    Serial.print(baseline, 2);
-    Serial.print(" (samples=");
-    Serial.print(count);
-    Serial.println(")");
+    if (Config::Debug::logTof)
+    {
+        Serial.print("Calibrate ");
+        Serial.println(count < sampleCount ? "timeout" : "done");
+        Serial.print("Baseline = ");
+        Serial.print(baseline, 2);
+        Serial.print(" (samples=");
+        Serial.print(count);
+        Serial.println(")");
+    }
     primeFilter();
 }
 
@@ -193,7 +203,8 @@ void TofSensor::primeFilter()
     }
     else
     {
-        Serial.println("PrimeFilter timeout, filter not ready");
+        if (Config::Debug::logErrors)
+            Serial.println("PrimeFilter timeout, filter not ready");
     }
 }
 

@@ -95,7 +95,7 @@ void DoorController::updateAutoMode(unsigned long now)
 
     currentPresent = isPresent;
 
-    if (Config::Debug::logDistance)
+    if (Config::Debug::logDoor)
     {
         if (now - lastPrintTime >= Config::Debug::printIntervalMs)
         {

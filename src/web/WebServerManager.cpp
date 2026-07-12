@@ -23,7 +23,7 @@ void WebServerManager::begin(DoorController *doorCtrl,
 
     server->begin();
 
-    Serial.println("Web Server Started");
+    if (Config::Debug::logStartup) Serial.println("Web Server Started");
 }
 
 void WebServerManager::setupRoutes()
@@ -58,19 +58,28 @@ void WebServerManager::setupRoutes()
 
 void WebServerManager::handleRoot(AsyncWebServerRequest *request)
 {
-    Serial.println("HTTP GET /");
+    if (Config::Debug::logHttp) Serial.println("HTTP GET /");
     request->send_P(200, "text/html", INDEX_HTML);
 }
 
 void WebServerManager::handleStatus(AsyncWebServerRequest *request)
 {
-    Serial.println("HTTP GET /api/status");
+    if (Config::Debug::logHttp) Serial.println("HTTP GET /api/status");
     String json = buildStatusJson();
     request->send(200, "application/json", json);
 }
 
 void WebServerManager::handleServo(AsyncWebServerRequest *request)
 {
+    if (!door->isManualMode())
+    {
+        if (Config::Debug::logErrors)
+            Serial.println("HTTP servo rejected: manual mode required");
+        request->send(409, "application/json",
+                      "{\"error\":\"manual mode required\"}");
+        return;
+    }
+
     if (!request->hasParam("angle"))
     {
         request->send(400, "application/json", "{\"error\":\"missing angle\"}");

@@ -79,3 +79,4 @@ stateDiagram-v2
 - 网络缓存索引必须与排序后的 SSID vector 一致。
 - `getScanSnapshot()` 必须在同一把互斥锁内复制列表文本与 SSID vector，使一次 BLE Read 得到一致的索引快照。
 - 密码只存 NVS，不应在此模块输出。
+- Wi-Fi连接摘要受 logWifi 控制；底层事件受 logWifiEvents 控制；扫描生命周期受 logWifiScan 控制；逐热点 SSID/RSSI/信道/认证明细受 logWifiScanDetails 控制。后三类默认关闭，错误继续受 logErrors 控制。

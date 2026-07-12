@@ -11,10 +11,13 @@ void WifiManager::begin()
     WiFi.mode(WIFI_STA);
 
     WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
-        Serial.print("WiFi Event=");
-        Serial.print(event);
-        Serial.print(" reason=");
-        Serial.println(info.wifi_sta_disconnected.reason);
+        if (Config::Debug::logWifiEvents)
+        {
+            Serial.print("WiFi Event=");
+            Serial.print(event);
+            Serial.print(" reason=");
+            Serial.println(info.wifi_sta_disconnected.reason);
+        }
     });
 
     connected = false;
@@ -43,14 +46,17 @@ void WifiManager::begin()
 
     if (savedSSID.length() > 0)
     {
-        Serial.print("WiFi: trying ");
-        Serial.println(savedSSID);
+        if (Config::Debug::logWifi)
+        {
+            Serial.print("WiFi: trying ");
+            Serial.println(savedSSID);
+        }
 
         tryConnect(savedSSID.c_str(), savedPass.c_str());
     }
     else
     {
-        Serial.println("WiFi: no saved credentials");
+        if (Config::Debug::logWifi) Serial.println("WiFi: no saved credentials");
     }
 }
 
@@ -68,8 +74,11 @@ void WifiManager::update()
             connected = true;
             connecting = false;
 
-            Serial.print("WiFi Connected, IP: ");
-            Serial.println(WiFi.localIP());
+            if (Config::Debug::logWifi)
+            {
+                Serial.print("WiFi Connected, IP: ");
+                Serial.println(WiFi.localIP());
+            }
 
             connectStatus = "STATE|CONNECTED|";
             connectStatus += WiFi.localIP().toString();
@@ -77,19 +86,25 @@ void WifiManager::update()
 
             if (MDNS.begin(Config::Network::mdnsHostname))
             {
-                Serial.print("mDNS: http://");
-                Serial.print(Config::Network::mdnsHostname);
-                Serial.println(".local");
+                if (Config::Debug::logWifi)
+                {
+                    Serial.print("mDNS: http://");
+                    Serial.print(Config::Network::mdnsHostname);
+                    Serial.println(".local");
+                }
             }
         }
         else if (now - connectStartTime >= Config::Network::connectTimeoutMs)
         {
-            Serial.print("WiFi status=");
-            Serial.println(WiFi.status());
+            if (Config::Debug::logWifi)
+            {
+                Serial.print("WiFi status=");
+                Serial.println(WiFi.status());
+            }
 
             connecting = false;
 
-            Serial.println("WiFi: timeout");
+            if (Config::Debug::logErrors) Serial.println("WiFi: timeout");
 
             WiFi.disconnect();
             delay(100);
@@ -120,7 +135,7 @@ void WifiManager::update()
             {
                 scanning = false;
                 WiFi.scanDelete();
-                Serial.println("WiFi Scan abort: timeout");
+                if (Config::Debug::logErrors) Serial.println("WiFi Scan abort: timeout");
                 return;
             }
             return;
@@ -130,7 +145,7 @@ void WifiManager::update()
 
         if (n == -2)
         {
-            Serial.println("WiFi Scan: failed to start");
+            if (Config::Debug::logErrors) Serial.println("WiFi Scan: failed to start");
             scanning = false;
             return;
         }
@@ -160,8 +175,11 @@ void WifiManager::update()
         {
             connected = true;
 
-            Serial.print("WiFi Connected, IP: ");
-            Serial.println(WiFi.localIP());
+            if (Config::Debug::logWifi)
+            {
+                Serial.print("WiFi Connected, IP: ");
+                Serial.println(WiFi.localIP());
+            }
 
             connectStatus = "STATE|CONNECTED|";
             connectStatus += WiFi.localIP().toString();
@@ -169,9 +187,12 @@ void WifiManager::update()
 
             if (MDNS.begin(Config::Network::mdnsHostname))
             {
-                Serial.print("mDNS: http://");
-                Serial.print(Config::Network::mdnsHostname);
-                Serial.println(".local");
+                if (Config::Debug::logWifi)
+                {
+                    Serial.print("mDNS: http://");
+                    Serial.print(Config::Network::mdnsHostname);
+                    Serial.println(".local");
+                }
             }
         }
         return;
@@ -181,7 +202,7 @@ void WifiManager::update()
     {
         connected = false;
 
-        Serial.println("WiFi Disconnected");
+        if (Config::Debug::logWifi) Serial.println("WiFi Disconnected");
 
         connectStatus = "STATE|DISCONNECTED";
         statusChanged = true;
@@ -206,13 +227,13 @@ void WifiManager::beginScan()
 {
     if (scanning)
     {
-        Serial.println("WiFi Scan skip: scan in progress");
+        if (Config::Debug::logWifiScan) Serial.println("WiFi Scan skip: scan in progress");
         return;
     }
 
     if (isConnected())
     {
-        Serial.println("WiFi Scan: keeping current connection");
+        if (Config::Debug::logWifiScan) Serial.println("WiFi Scan: keeping current connection");
     }
     else
     {
@@ -222,8 +243,11 @@ void WifiManager::beginScan()
 
     scanStartTime = millis();
 
-    Serial.print("WiFi status=");
-    Serial.println(WiFi.status());
+    if (Config::Debug::logWifiScan)
+    {
+        Serial.print("WiFi status=");
+        Serial.println(WiFi.status());
+    }
 
     int result = WiFi.scanNetworks(true);
     if (result == WIFI_SCAN_RUNNING)
@@ -231,13 +255,16 @@ void WifiManager::beginScan()
         scanning = true;
         connectStatus = "STATE|SCANNING";
         statusChanged = true;
-        Serial.println("WiFi Scan started");
+        if (Config::Debug::logWifiScan) Serial.println("WiFi Scan started");
         return;
     }
 
     scanning = false;
-    Serial.print("WiFi Scan: failed to start, result=");
-    Serial.println(result);
+    if (Config::Debug::logErrors)
+    {
+        Serial.print("WiFi Scan: failed to start, result=");
+        Serial.println(result);
+    }
 }
 
 //=====================================================
@@ -261,7 +288,7 @@ void WifiManager::processScanResult(int n)
 {
     if (n <= 0)
     {
-        Serial.println("WiFi Scan: no networks");
+        if (Config::Debug::logWifiScan) Serial.println("WiFi Scan: no networks");
 
         return;
     }
@@ -283,23 +310,21 @@ void WifiManager::processScanResult(int n)
         }
     }
 
-    Serial.print("Scan count=");
-    Serial.println(n);
-
-    for (int i = 0; i < n; i++)
+    if (Config::Debug::logWifiScanDetails)
     {
-        Serial.print("  ");
-        Serial.print("SSID=");
-        Serial.print(WiFi.SSID(i));
-
-        Serial.print(" RSSI=");
-        Serial.print(WiFi.RSSI(i));
-
-        Serial.print(" CH=");
-        Serial.print(WiFi.channel(i));
-
-        Serial.print(" AUTH=");
-        Serial.println(WiFi.encryptionType(i));
+        Serial.print("Scan count=");
+        Serial.println(n);
+        for (int i = 0; i < n; i++)
+        {
+            Serial.print("  SSID=");
+            Serial.print(WiFi.SSID(i));
+            Serial.print(" RSSI=");
+            Serial.print(WiFi.RSSI(i));
+            Serial.print(" CH=");
+            Serial.print(WiFi.channel(i));
+            Serial.print(" AUTH=");
+            Serial.println(WiFi.encryptionType(i));
+        }
     }
 
     String newCachedNetworks;
@@ -334,7 +359,7 @@ void WifiManager::processScanResult(int n)
         xSemaphoreGive(scanSnapshotMutex);
     }
 
-    Serial.println("WiFi Scan done");
+    if (Config::Debug::logWifiScan) Serial.println("WiFi Scan done");
 }
 
 //=====================================================
@@ -354,7 +379,7 @@ bool WifiManager::tryConnect(const char *ssid,
 
     WiFi.setSleep(false);
 
-    Serial.println("WiFi.begin");
+    if (Config::Debug::logWifi) Serial.println("WiFi.begin");
 
     WiFi.begin(ssid, password);
 
@@ -379,8 +404,11 @@ bool WifiManager::saveCredentials(const char *ssid,
     prefs.putString("pass", password);
     prefs.end();
 
-    Serial.print("WiFi saved: ");
-    Serial.println(ssid);
+    if (Config::Debug::logWifi)
+    {
+        Serial.print("WiFi saved: ");
+        Serial.println(ssid);
+    }
     return true;
 }
 

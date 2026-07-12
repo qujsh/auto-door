@@ -15,9 +15,12 @@ void AutoDoorApp::begin()
     }
     delay(Config::Serial::startupDelayMs);
 
-    Serial.println("=================================");
-    Serial.println("AutoDoorBLE starting...");
-    Serial.println("=================================");
+    if (Config::Debug::logStartup)
+    {
+        Serial.println("=================================");
+        Serial.println("AutoDoorBLE starting...");
+        Serial.println("=================================");
+    }
 
     servo_.begin(Config::Pins::servo,
                  Config::Servo::closedAngle,
@@ -52,10 +55,11 @@ void AutoDoorApp::begin()
     }
     else
     {
-        Serial.println("No WiFi connection. Configure it over BLE.");
+        if (Config::Debug::logStartup)
+            Serial.println("No WiFi connection. Configure it over BLE.");
     }
 
-    Serial.println("System ready");
+    if (Config::Debug::logStartup) Serial.println("System ready");
 }
 
 void AutoDoorApp::update()
@@ -87,7 +91,8 @@ void AutoDoorApp::handleWiFiConfig()
 
     if (ssid.isEmpty())
     {
-        Serial.println("BLE WiFi configuration contains an invalid network index");
+        if (Config::Debug::logErrors)
+            Serial.println("BLE WiFi configuration contains an invalid network index");
         return;
     }
 
@@ -106,9 +111,12 @@ void AutoDoorApp::enterRunningState()
     state_ = State::Running;
     web_.begin(&door_, &servo_, &wifi_);
 
-    Serial.print("Web: http://");
-    Serial.print(wifi_.getLocalIP());
-    Serial.print(" or http://");
-    Serial.print(Config::Network::mdnsHostname);
-    Serial.println(".local");
+    if (Config::Debug::logStartup)
+    {
+        Serial.print("Web: http://");
+        Serial.print(wifi_.getLocalIP());
+        Serial.print(" or http://");
+        Serial.print(Config::Network::mdnsHostname);
+        Serial.println(".local");
+    }
 }

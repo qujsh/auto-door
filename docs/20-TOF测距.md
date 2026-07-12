@@ -109,6 +109,7 @@ float getBaseline() const;
 - `primeFilter()` 超时只表示启动时没有填满三点窗口，不锁死滤波器；后续 `readDistance()` 收到有效读数时从当前窗口位置继续填充，前两条直接返回当前有效距离，三条后恢复中值滤波。
 - 单次 `rangingTest` 为同步测量；主循环中不增加示例的 200ms delay。
 - 门控阈值和公开距离继续使用厘米。
+- 初始化与标定概要受 logTof 控制；逐个标定样本受 logTofSamples 控制且默认关闭；初始化失败和滤波超时受 logErrors 控制。
 
 ### 8. 重建验收
 

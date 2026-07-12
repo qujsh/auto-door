@@ -13,7 +13,7 @@
 
 ```text
 ┌──────────────────────────────┐
-│        Auto Door V3          │
+│         智能自动门 V3          │
 ├──────────────────────────────┤
 │ 网络：Wi-Fi / IP / RSSI       │
 ├──────────────────────────────┤
@@ -21,7 +21,7 @@
 │ 门控：检测 / 人员 / 门状态      │
 │ 执行：当前舵机角度              │
 ├──────────────────────────────┤
-│ 模式：○ AUTO   ○ MANUAL       │
+│ 模式：○ 自动    ○ 手动          │
 ├──────────────────────────────┤
 │       舵机角度滑块             │
 │ [关门] [开门] [重新标定]        │
@@ -42,7 +42,7 @@
   → 下一次状态更新反映执行结果
 ```
 
-页面只负责展示信息和表达用户意图，不自行判断是否有人，也不直接控制硬件。重新标定前需要确保门前无人，手动控制前需要确认门体运动范围安全。当前页面没有身份认证，只适合可信局域网。
+页面只负责展示信息和表达用户意图，不自行判断是否有人，也不直接控制硬件。AUTO 自动模式下舵机滑块和开/关门按钮禁用；切换到 MANUAL 手动模式后才允许操作。重新标定前需要确保门前无人，手动控制前需要确认门体运动范围安全。当前页面没有身份认证，只适合可信局域网。
 
 
 ---
@@ -53,21 +53,22 @@
 
 ### 文件结构
 
-`WebPage.h` guard 为 `WEB_PAGE_H`，声明 `const char INDEX_HTML[] PROGMEM`，内容使用 C++ raw string。HTML 语言 zh、UTF-8、移动端 viewport，标题 `Auto Door V3`。页面最大宽度 440px，深色卡片式布局。
+`WebPage.h` guard 为 `WEB_PAGE_H`，声明 `const char INDEX_HTML[] PROGMEM`，内容使用 C++ raw string。HTML 语言 zh-CN、UTF-8、移动端 viewport，标题 `智能自动门 V3`。页面最大宽度 440px，深色卡片式布局；所有用户可见标题、标签、按钮、布尔状态、门状态和离线提示均使用中文。
 
 ### 必备 DOM
 
-状态元素 id：`wifi`、`ip`、`rssi`、`dist`、`base`、`diff`、`detect`、`present`、`door`、`servo`。模式 radio 的 name 为 `mode`、value 分别 auto/manual。角度控件为 0..180 的 `slider`，显示为 `angleDisp`。存在 CLOSE(0)、OPEN(90)、CALIBRATE 按钮和 `log` 容器。
+状态元素 id：`wifi`、`ip`、`rssi`、`dist`、`base`、`diff`、`detect`、`present`、`door`、`servo`。模式 radio 的 name 为 `mode`、内部 value 分别保持 auto/manual，页面显示“自动/手动”。角度控件为 0..180 的 `slider`，显示为 `angleDisp`。slider 与“关门”(0)、“开门”(90)按钮带 `manual-control` class，页面初始禁用；“重新标定”按钮和 `log` 容器保留。
 
 ### JavaScript 行为
 
-- `setServo(a)` 同步控件后 GET `/api/servo?angle=`。
+- `currentMode` 保存后端模式；`setServo(a)` 仅在 MANUAL 时同步控件并 GET `/api/servo?angle=`，AUTO 时直接返回。
+- `setManualControlsEnabled()` 统一启停全部 `manual-control` 元素；每次状态更新仅在 MANUAL 时启用滑块和开/关门按钮，禁用样式必须明显。
 - slider 的 input 和 change 均调用 setServo。
 - `setMode(m)` POST JSON 到 `/api/mode`。
 - `calibrate()` POST `/api/calibrate`，成功时刷新 baseline。
 - `update()` GET `/api/status`，刷新全部字段、颜色、radio 和门状态。
-- AUTO 时用后端 servo 更新 slider；MANUAL 时保留用户控制位置。
-- 请求失败时 Wi-Fi 显示 Offline。
+- AUTO 时禁用手动舵机控件并用后端 servo 更新 slider；MANUAL 时启用控件并保留用户控制位置。
+- 请求失败时 Wi-Fi 显示“离线”；CONNECTED/DISCONNECTED、YES/NO 和 CLOSED/OPEN/WAIT_CLOSE 等后端契约在页面中分别映射为中文，不修改 API 原始值。
 - 页面加载后立即 update，并 `setInterval(update,500)`。
 
 `addLog()` 会追加带本地时间的行并限制 50 条，但当前没有调用者。

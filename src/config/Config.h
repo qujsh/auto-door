@@ -59,7 +59,19 @@ constexpr unsigned long reconnectIntervalMs = 30000;
 
 namespace Debug
 {
-constexpr bool logDistance = true;
+constexpr bool enabled = true;
+constexpr bool logStartup = enabled && true;
+constexpr bool logErrors = enabled && true;
+constexpr bool logTof = enabled && true;
+constexpr bool logTofSamples = enabled && false;
+constexpr bool logDoor = enabled && false;
+constexpr bool logWifi = enabled && true;
+constexpr bool logWifiEvents = enabled && false;
+constexpr bool logWifiScan = enabled && false;
+constexpr bool logWifiScanDetails = enabled && false;
+constexpr bool logBle = enabled && true;
+constexpr bool logBlePayload = enabled && false;
+constexpr bool logHttp = enabled && false;
 constexpr unsigned long printIntervalMs = 300;
 }
 
