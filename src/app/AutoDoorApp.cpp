@@ -70,10 +70,9 @@ void AutoDoorApp::update()
         enterRunningState();
     }
 
-    if (state_ == State::Running)
-    {
-        door_.update();
-    }
+    // Automatic door control is a local safety function and must keep
+    // running even when Wi-Fi has not been configured or is disconnected.
+    door_.update();
 }
 
 void AutoDoorApp::handleWiFiConfig()
