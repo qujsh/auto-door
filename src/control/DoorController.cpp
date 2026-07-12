@@ -5,6 +5,9 @@ DoorController::DoorController()
       servo(nullptr),
       state(DoorState::Closed),
       baseline(0),
+      initialAngle(Config::Servo::closedAngle),
+      rotationAngle(Config::Servo::openAngle - Config::Servo::closedAngle),
+      distanceThresholdCm(Config::Tof::changeThresholdCm),
       lastSeenTime(0),
       closeStartTime(0),
       manualMode(false),
@@ -35,7 +38,23 @@ void DoorController::begin(TofSensor *sensor,
     detecting = false;
     detectStartTime = 0;
 
-    servo->setTargetAngle(Config::Servo::closedAngle);
+    servo->setTargetAngle(initialAngle);
+}
+
+void DoorController::loadRuntimeSettings()
+{
+    Preferences preferences;
+    preferences.begin("doorcfg", true);
+    initialAngle = constrain(preferences.getInt("initial", Config::Servo::closedAngle), 0, 180);
+    rotationAngle = constrain(
+        preferences.getInt("rotation", Config::Servo::openAngle - Config::Servo::closedAngle),
+        -180, 180);
+    distanceThresholdCm = preferences.getFloat("threshold", Config::Tof::changeThresholdCm);
+    preferences.end();
+    if (distanceThresholdCm < 0.1F || distanceThresholdCm > 200.0F)
+        distanceThresholdCm = Config::Tof::changeThresholdCm;
+    if (initialAngle + rotationAngle < 0 || initialAngle + rotationAngle > 180)
+        rotationAngle = constrain(rotationAngle, -initialAngle, 180 - initialAngle);
 }
 
 void DoorController::update()
@@ -66,7 +85,7 @@ void DoorController::updateAutoMode(unsigned long now)
 
     currentDiff = diff;
 
-    bool detect = (diff >= Config::Tof::changeThresholdCm);
+    bool detect = (diff >= distanceThresholdCm);
 
     currentDetect = detect;
 
@@ -178,7 +197,7 @@ void DoorController::updateAutoMode(unsigned long now)
 //=====================================================
 void DoorController::setDoorOpen()
 {
-    servo->setTargetAngle(Config::Servo::openAngle);
+    servo->setTargetAngle(getOpenAngle());
 }
 
 //=====================================================
@@ -186,7 +205,7 @@ void DoorController::setDoorOpen()
 //=====================================================
 void DoorController::setDoorClose()
 {
-    servo->setTargetAngle(Config::Servo::closedAngle);
+    servo->setTargetAngle(initialAngle);
 }
 
 //=====================================================
@@ -247,4 +266,56 @@ void DoorController::triggerCalibrate()
     state = DoorState::Closed;
 
     detecting = false;
+}
+
+bool DoorController::saveRuntimeSettings(int newInitialAngle,
+                                         int newRotationAngle,
+                                         float newDistanceThresholdCm)
+{
+    if (!manualMode ||
+        newInitialAngle < 0 || newInitialAngle > 180 ||
+        newRotationAngle < -180 || newRotationAngle > 180 ||
+        newInitialAngle + newRotationAngle < 0 ||
+        newInitialAngle + newRotationAngle > 180 ||
+        newDistanceThresholdCm < 0.1F || newDistanceThresholdCm > 200.0F)
+    {
+        return false;
+    }
+
+    initialAngle = newInitialAngle;
+    rotationAngle = newRotationAngle;
+    distanceThresholdCm = newDistanceThresholdCm;
+    state = DoorState::Closed;
+    detecting = false;
+    currentDetect = false;
+    currentPresent = false;
+    servo->setTargetAngle(initialAngle);
+
+    Preferences preferences;
+    preferences.begin("doorcfg", false);
+    preferences.putInt("initial", initialAngle);
+    preferences.putInt("rotation", rotationAngle);
+    preferences.putFloat("threshold", distanceThresholdCm);
+    preferences.end();
+    return true;
+}
+
+int DoorController::getInitialAngle() const
+{
+    return initialAngle;
+}
+
+int DoorController::getRotationAngle() const
+{
+    return rotationAngle;
+}
+
+int DoorController::getOpenAngle() const
+{
+    return constrain(initialAngle + rotationAngle, 0, 180);
+}
+
+float DoorController::getDistanceThresholdCm() const
+{
+    return distanceThresholdCm;
 }

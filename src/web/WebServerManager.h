@@ -33,6 +33,7 @@ private:
                     size_t index,
                     size_t total);
     void handleCalibrate(AsyncWebServerRequest *request);
+    void handleSettings(AsyncWebServerRequest *request);
 
     String buildStatusJson();
     const char *doorStateToString(DoorState s);

@@ -30,6 +30,10 @@ input[type=range]{width:100%;height:6px;-webkit-appearance:none;appearance:none;
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;background:#533483;border-radius:50%;cursor:pointer}
 input[type=range]:disabled{opacity:.35;cursor:not-allowed}
 .angle-val{text-align:center;font-size:28px;font-weight:700;margin:4px 0 2px}
+.setting-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.setting-grid label{font-size:12px;color:#888}
+.setting-grid input{width:100%;margin-top:4px;padding:8px;border:1px solid #30304a;border-radius:6px;background:#101020;color:#e0e0e0}
+.setting-note{font-size:11px;color:#777;margin-top:8px;line-height:1.5}
 .mode-row{display:flex;gap:20px;align-items:center;padding:4px 0}
 .mode-row label{cursor:pointer;font-size:15px}
 .mode-row input[type=radio]{accent-color:#533483;width:16px;height:16px;cursor:pointer}
@@ -70,21 +74,45 @@ input[type=range]:disabled{opacity:.35;cursor:not-allowed}
 <div class="angle-val"><span id="angleDisp">0</span>&#176;</div>
 <div class="slider-wrap"><input type="range" id="slider" class="manual-control" min="0" max="180" value="0" oninput="onSlider()" onchange="onSlider()" disabled></div>
 <div class="btn-row">
-<button class="btn manual-control" onclick="setServo(0)" disabled>关门</button>
-<button class="btn primary manual-control" onclick="setServo(90)" disabled>开门</button>
+<button class="btn manual-control" onclick="setServo(currentInitialAngle)" disabled>关门</button>
+<button class="btn primary manual-control" onclick="setServo(currentOpenAngle)" disabled>开门</button>
 <button class="btn" onclick="calibrate()">重新标定</button>
 </div>
+</div>
+
+<div class="card">
+<div class="lbl">自动门参数</div>
+<div class="row"><span class="lbl">计算后的开门角度</span><span id="openAngle" class="val">90°</span></div>
+<div class="setting-grid">
+<label>初始/关门角度（0～180°）<input id="initialInput" class="manual-control" type="number" min="0" max="180" value="0" oninput="previewOpenAngle()" disabled></label>
+<label>相对转动角度（-180～180°）<input id="rotationInput" class="manual-control" type="number" min="-180" max="180" value="90" oninput="previewOpenAngle()" disabled></label>
+<label>触发距离差（0.1～200cm）<input id="thresholdInput" class="manual-control" type="number" min="0.1" max="200" step="0.1" value="2.5" disabled></label>
+</div>
+<button class="btn primary manual-control" style="width:100%;margin-top:10px" onclick="saveSettings()" disabled>保存自动门参数</button>
+<div class="setting-note">初始角度和“初始角度 + 相对转动角度”都必须在 0～180°。保存后舵机会移动到新的初始/关门角度；正负转动角度用于选择开门方向。</div>
 </div>
 
 <div id="log"></div>
 
 <script>
-var ip='',autoAngle=0,currentMode='AUTO';
+var ip='',autoAngle=0,currentMode='AUTO',settingsLoaded=false,currentInitialAngle=0,currentOpenAngle=90;
 function onSlider(){var v=document.getElementById('slider').value;document.getElementById('angleDisp').textContent=v;setServo(v)}
 function setServo(a){if(currentMode!=='MANUAL')return;document.getElementById('slider').value=a;document.getElementById('angleDisp').textContent=a;fetch('/api/servo?angle='+a)}
 function setMode(m){fetch('/api/mode',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"mode":"'+m+'"}'}).then(update)}
 function setManualControlsEnabled(enabled){document.querySelectorAll('.manual-control').forEach(function(el){el.disabled=!enabled})}
 function calibrate(){fetch('/api/calibrate',{method:'POST'}).then(function(r){return r.json()}).then(function(d){if(d.baseline)document.getElementById('base').textContent=d.baseline.toFixed(2)+' cm'})}
+function previewOpenAngle(){var a=Number(document.getElementById('initialInput').value),r=Number(document.getElementById('rotationInput').value),o=a+r,e=document.getElementById('openAngle');e.textContent=(a>=0&&a<=180&&r>=-180&&r<=180&&o>=0&&o<=180)?o+'°':'超出范围';e.className=(o>=0&&o<=180)?'val':'val r'}
+function saveSettings(){
+  if(currentMode!=='MANUAL')return;
+  var initial=Number(document.getElementById('initialInput').value);
+  var rotation=document.getElementById('rotationInput').value;
+  var threshold=document.getElementById('thresholdInput').value;
+  var open=initial+Number(rotation);
+  if(initial<0||initial>180||open<0||open>180){alert('初始角度或计算后的开门角度超出 0～180°');return}
+  fetch('/api/settings?initial='+encodeURIComponent(initial)+'&rotation='+encodeURIComponent(rotation)+'&threshold='+encodeURIComponent(threshold),{method:'POST'})
+    .then(function(r){if(!r.ok)throw new Error('save failed');return r.json()})
+    .then(function(){settingsLoaded=false;update()})
+}
 function addLog(m){var l=document.getElementById('log'),t=new Date().toLocaleTimeString();l.innerHTML+='<div class="log-line">'+t+' '+m+'</div>';l.scrollTop=l.scrollHeight;while(l.children.length>50)l.removeChild(l.firstChild)}
 function update(){
   fetch('/api/status').then(function(r){return r.json()}).then(function(d){
@@ -102,6 +130,10 @@ function update(){
     else if(d.door==='WAIT_CLOSE')dr.className='val y';
     else dr.className='val';
     document.getElementById('servo').textContent=d.servo+'°';
+    currentInitialAngle=d.initialAngle;currentOpenAngle=d.openAngle;
+    document.getElementById('openAngle').textContent=currentOpenAngle+'°';
+    document.getElementById('openAngle').className='val';
+    if(!settingsLoaded){document.getElementById('initialInput').value=d.initialAngle;document.getElementById('rotationInput').value=d.rotationAngle;document.getElementById('thresholdInput').value=d.distanceThreshold;settingsLoaded=true}
     currentMode=d.mode;
     setManualControlsEnabled(d.mode==='MANUAL');
     if(d.mode==='AUTO'){document.querySelector('input[value=auto]').checked=true}

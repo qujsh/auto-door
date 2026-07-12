@@ -54,6 +54,10 @@ void WebServerManager::setupRoutes()
     server->on("/api/calibrate", HTTP_POST, [this](AsyncWebServerRequest *request) {
         handleCalibrate(request);
     });
+
+    server->on("/api/settings", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        handleSettings(request);
+    });
 }
 
 void WebServerManager::handleRoot(AsyncWebServerRequest *request)
@@ -122,6 +126,37 @@ void WebServerManager::handleCalibrate(AsyncWebServerRequest *request)
     request->send(200, "application/json", json);
 }
 
+void WebServerManager::handleSettings(AsyncWebServerRequest *request)
+{
+    if (!door->isManualMode())
+    {
+        request->send(409, "application/json",
+                      "{\"error\":\"manual mode required\"}");
+        return;
+    }
+
+    if (!request->hasParam("initial") ||
+        !request->hasParam("rotation") ||
+        !request->hasParam("threshold"))
+    {
+        request->send(400, "application/json",
+                      "{\"error\":\"missing settings\"}");
+        return;
+    }
+
+    const int initial = request->getParam("initial")->value().toInt();
+    const int rotation = request->getParam("rotation")->value().toInt();
+    const float threshold = request->getParam("threshold")->value().toFloat();
+    if (!door->saveRuntimeSettings(initial, rotation, threshold))
+    {
+        request->send(400, "application/json",
+                      "{\"error\":\"invalid settings\"}");
+        return;
+    }
+
+    request->send(200, "application/json", "{\"ok\":true}");
+}
+
 String WebServerManager::buildStatusJson()
 {
     String s = "{";
@@ -142,7 +177,15 @@ String WebServerManager::buildStatusJson()
     s += String(servo->getCurrentAngle());
     s += ",\"mode\":\"";
     s += door->isManualMode() ? "MANUAL" : "AUTO";
-    s += "\",\"wifi\":";
+    s += "\",\"initialAngle\":";
+    s += String(door->getInitialAngle());
+    s += ",\"rotationAngle\":";
+    s += String(door->getRotationAngle());
+    s += ",\"openAngle\":";
+    s += String(door->getOpenAngle());
+    s += ",\"distanceThreshold\":";
+    s += String(door->getDistanceThresholdCm(), 2);
+    s += ",\"wifi\":";
     s += wifi->isConnected() ? "true" : "false";
     s += ",\"ip\":\"";
     s += wifi->getLocalIP();

@@ -44,6 +44,8 @@
 
 页面只负责展示信息和表达用户意图，不自行判断是否有人，也不直接控制硬件。AUTO 自动模式下舵机滑块和开/关门按钮禁用；切换到 MANUAL 手动模式后才允许操作。重新标定前需要确保门前无人，手动控制前需要确认门体运动范围安全。当前页面没有身份认证，只适合可信局域网。
 
+设置自动门参数时先切到手动，直接编辑初始/关门角度、相对转动角度和触发距离差。页面实时预览计算后的开门角度；只有初始角和开门角均处于 0～180°才提交。保存后舵机移动到新初始角，设置写入设备并在重启后继续有效。
+
 
 ---
 
@@ -57,12 +59,14 @@
 
 ### 必备 DOM
 
-状态元素 id：`wifi`、`ip`、`rssi`、`dist`、`base`、`diff`、`detect`、`present`、`door`、`servo`。模式 radio 的 name 为 `mode`、内部 value 分别保持 auto/manual，页面显示“自动/手动”。角度控件为 0..180 的 `slider`，显示为 `angleDisp`。slider 与“关门”(0)、“开门”(90)按钮带 `manual-control` class，页面初始禁用；“重新标定”按钮和 `log` 容器保留。
+除既有 DOM 外，设置区包含可编辑 `initialInput`、只读预览 `openAngle`、`rotationInput`、`thresholdInput`。三个输入和保存按钮属于 manual-control；保存按钮文字为“保存自动门参数”。
 
 ### JavaScript 行为
 
-- `currentMode` 保存后端模式；`setServo(a)` 仅在 MANUAL 时同步控件并 GET `/api/servo?angle=`，AUTO 时直接返回。
+- `currentMode` 保存后端模式；currentInitialAngle/currentOpenAngle 保存后端计算值。“关门/开门”按钮分别使用这两个运行角度，不再硬编码 0/90。`setServo(a)` 仅在 MANUAL 时同步控件并 GET `/api/servo?angle=`，AUTO 时直接返回。
 - `setManualControlsEnabled()` 统一启停全部 `manual-control` 元素；每次状态更新仅在 MANUAL 时启用滑块和开/关门按钮，禁用样式必须明显。
+- `previewOpenAngle()` 在编辑 initial/rotation 时实时计算，越界显示红色“超出范围”。`saveSettings()` 仅在 MANUAL 且前端范围检查通过时请求 `POST /api/settings?initial=...&rotation=...&threshold=...`，设置成功后刷新状态。
+- 状态轮询显示 openAngle，并首次加载 initialAngle/rotationAngle/distanceThreshold 到输入框；不得每 500ms 覆盖用户正在编辑的值。
 - slider 的 input 和 change 均调用 setServo。
 - `setMode(m)` POST JSON 到 `/api/mode`。
 - `calibrate()` POST `/api/calibrate`，成功时刷新 baseline。

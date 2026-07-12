@@ -22,8 +22,10 @@ void AutoDoorApp::begin()
         Serial.println("=================================");
     }
 
+    door_.loadRuntimeSettings();
+
     servo_.begin(Config::Pins::servo,
-                 Config::Servo::closedAngle,
+                 door_.getInitialAngle(),
                  Config::Servo::updateIntervalMs,
                  Config::Servo::openStep,
                  Config::Servo::closeStep);
