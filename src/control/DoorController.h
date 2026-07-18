@@ -73,6 +73,7 @@ private:
     unsigned long closeStartTime;
 
     bool manualMode;
+    bool buttonOpenRequested;
 
     bool detecting;
     unsigned long detectStartTime;

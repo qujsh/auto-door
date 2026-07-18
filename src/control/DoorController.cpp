@@ -11,6 +11,7 @@ DoorController::DoorController()
       lastSeenTime(0),
       closeStartTime(0),
       manualMode(false),
+      buttonOpenRequested(false),
       detecting(false),
       detectStartTime(0),
       currentDistance(-1),
@@ -35,6 +36,7 @@ void DoorController::begin(TofSensor *sensor,
     closeStartTime = 0;
 
     manualMode = false;
+    buttonOpenRequested = false;
     detecting = false;
     detectStartTime = 0;
 
@@ -158,7 +160,7 @@ void DoorController::updateAutoMode(unsigned long now)
     {
         case DoorState::Closed:
         {
-            if (isPresent)
+            if (isPresent || buttonOpenRequested)
             {
                 setDoorOpen();
                 state = DoorState::Open;
@@ -168,7 +170,7 @@ void DoorController::updateAutoMode(unsigned long now)
 
         case DoorState::Open:
         {
-            if (!isPresent)
+            if (!isPresent && !buttonOpenRequested)
             {
                 state = DoorState::WaitingToClose;
                 closeStartTime = now;
@@ -178,7 +180,7 @@ void DoorController::updateAutoMode(unsigned long now)
 
         case DoorState::WaitingToClose:
         {
-            if (isPresent)
+            if (isPresent || buttonOpenRequested)
             {
                 state = DoorState::Open;
             }
@@ -247,6 +249,10 @@ DoorState DoorController::getDoorState() const
 void DoorController::setManualMode(bool manual)
 {
     manualMode = manual;
+    if (!manual)
+    {
+        buttonOpenRequested = false;
+    }
 }
 
 bool DoorController::isManualMode() const
@@ -256,20 +262,17 @@ bool DoorController::isManualMode() const
 
 void DoorController::toggleFromButton()
 {
-    manualMode = true;
-    if (state == DoorState::Closed)
+    buttonOpenRequested = !buttonOpenRequested;
+    if (buttonOpenRequested)
     {
         setDoorOpen();
         state = DoorState::Open;
     }
-    else
+    else if (!currentPresent)
     {
         setDoorClose();
         state = DoorState::Closed;
     }
-    detecting = false;
-    currentDetect = false;
-    currentPresent = false;
 }
 
 //=====================================================
