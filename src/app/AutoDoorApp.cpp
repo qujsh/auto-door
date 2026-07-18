@@ -24,6 +24,9 @@ void AutoDoorApp::begin()
 
     door_.loadRuntimeSettings();
 
+    pushButton_.begin(Config::Pins::pushButton,
+                      Config::Door::buttonDebounceMs);
+
     servo_.begin(Config::Pins::servo,
                  door_.getInitialAngle(),
                  Config::Servo::updateIntervalMs,
@@ -70,6 +73,11 @@ void AutoDoorApp::update()
     servo_.update();
     ble_.update();
     handleWiFiConfig();
+
+    if (pushButton_.update())
+    {
+        door_.toggleFromButton();
+    }
 
     if (state_ == State::Configuring && wifi_.isConnected())
     {

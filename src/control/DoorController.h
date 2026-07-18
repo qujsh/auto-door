@@ -36,6 +36,7 @@ public:
     // ---- Manual 模式 ----
     void setManualMode(bool manual);
     bool isManualMode() const;
+    void toggleFromButton();
 
     // ---- 远程标定 ----
     void triggerCalibrate();

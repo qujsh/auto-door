@@ -63,7 +63,7 @@
 
 ### JavaScript 行为
 
-- `currentMode` 保存后端模式；currentInitialAngle/currentOpenAngle 保存后端计算值。“关门/开门”按钮分别使用这两个运行角度，不再硬编码 0/90。`setServo(a)` 仅在 MANUAL 时同步控件并 GET `/api/servo?angle=`，AUTO 时直接返回。
+- `currentMode` 保存后端模式；currentInitialAngle/currentOpenAngle 保存后端计算值。“关门/开门”按钮分别使用这两个运行角度，不硬编码实际动作角度；页面加载前的默认预览为 0/100。`setServo(a)` 仅在 MANUAL 时同步控件并 GET `/api/servo?angle=`，AUTO 时直接返回。
 - `setManualControlsEnabled()` 统一启停全部 `manual-control` 元素；每次状态更新仅在 MANUAL 时启用滑块和开/关门按钮，禁用样式必须明显。
 - `previewOpenAngle()` 在编辑 initial/rotation 时实时计算，越界显示红色“超出范围”。`saveSettings()` 仅在 MANUAL 且前端范围检查通过时请求 `POST /api/settings?initial=...&rotation=...&threshold=...`，设置成功后刷新状态。
 - 状态轮询显示 openAngle，并首次加载 initialAngle/rotationAngle/distanceThreshold 到输入框；不得每 500ms 覆盖用户正在编辑的值。

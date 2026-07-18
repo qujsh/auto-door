@@ -82,10 +82,10 @@ input[type=range]:disabled{opacity:.35;cursor:not-allowed}
 
 <div class="card">
 <div class="lbl">自动门参数</div>
-<div class="row"><span class="lbl">计算后的开门角度</span><span id="openAngle" class="val">90°</span></div>
+<div class="row"><span class="lbl">计算后的开门角度</span><span id="openAngle" class="val">100°</span></div>
 <div class="setting-grid">
 <label>初始/关门角度（0～180°）<input id="initialInput" class="manual-control" type="number" min="0" max="180" value="0" oninput="previewOpenAngle()" disabled></label>
-<label>相对转动角度（-180～180°）<input id="rotationInput" class="manual-control" type="number" min="-180" max="180" value="90" oninput="previewOpenAngle()" disabled></label>
+<label>相对转动角度（-180～180°）<input id="rotationInput" class="manual-control" type="number" min="-180" max="180" value="100" oninput="previewOpenAngle()" disabled></label>
 <label>触发距离差（0.1～200cm）<input id="thresholdInput" class="manual-control" type="number" min="0.1" max="200" step="0.1" value="2.5" disabled></label>
 </div>
 <button class="btn primary manual-control" style="width:100%;margin-top:10px" onclick="saveSettings()" disabled>保存自动门参数</button>
@@ -95,7 +95,7 @@ input[type=range]:disabled{opacity:.35;cursor:not-allowed}
 <div id="log"></div>
 
 <script>
-var ip='',autoAngle=0,currentMode='AUTO',settingsLoaded=false,currentInitialAngle=0,currentOpenAngle=90;
+var ip='',autoAngle=0,currentMode='AUTO',settingsLoaded=false,currentInitialAngle=0,currentOpenAngle=100;
 function onSlider(){var v=document.getElementById('slider').value;document.getElementById('angleDisp').textContent=v;setServo(v)}
 function setServo(a){if(currentMode!=='MANUAL')return;document.getElementById('slider').value=a;document.getElementById('angleDisp').textContent=a;fetch('/api/servo?angle='+a)}
 function setMode(m){fetch('/api/mode',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"mode":"'+m+'"}'}).then(update)}

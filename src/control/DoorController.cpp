@@ -254,6 +254,24 @@ bool DoorController::isManualMode() const
     return manualMode;
 }
 
+void DoorController::toggleFromButton()
+{
+    manualMode = true;
+    if (state == DoorState::Closed)
+    {
+        setDoorOpen();
+        state = DoorState::Open;
+    }
+    else
+    {
+        setDoorClose();
+        state = DoorState::Closed;
+    }
+    detecting = false;
+    currentDetect = false;
+    currentPresent = false;
+}
+
 //=====================================================
 // 远程标定
 //=====================================================

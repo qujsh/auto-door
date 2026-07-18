@@ -16,11 +16,12 @@ namespace Pins
 constexpr uint8_t i2cSda = 4;
 constexpr uint8_t i2cScl = 5;
 constexpr uint8_t servo = 6;
+constexpr uint8_t pushButton = 7;
 }
 
 namespace Servo
 {
-constexpr int openAngle = 90;
+constexpr int openAngle = 100;
 constexpr int closedAngle = 0;
 constexpr unsigned long updateIntervalMs = 15;
 constexpr int openStep = 30;
@@ -36,6 +37,7 @@ constexpr uint16_t maxValidDistanceMm = 2000;
 
 namespace Door
 {
+constexpr unsigned long buttonDebounceMs = 40;
 constexpr unsigned long presenceTimeoutMs = 1500;
 constexpr unsigned long closeDelayMs = 2000;
 constexpr unsigned long detectionDebounceMs = 200;
